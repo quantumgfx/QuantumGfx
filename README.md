@@ -1,16 +1,20 @@
-### Hi there 👋
+# Quantum Graphics
 
-<!--
-**quantumgfx/quantumgfx** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+Quantum Graphics is a low level, cross platform, graphics API, written in C++ 17.
 
-Here are some ideas to get you started:
+## Supported Platforms
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+- Windows (32 bit)
+- Windows (64 bit)
+- Linux
+
+## Graphics backends currently in developement
+
+- Vulkan 1.2 (Referred to in code as "Vulkan")
+
+## Planned backends
+
+- Vulkan 1.0 (Referred to as "VulkanLegacy")
+- MoltenVk
+- DirectX 12
+- Metal
