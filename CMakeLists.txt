@@ -36,6 +36,14 @@ add_library(Qgfx STATIC)
 
 # OPTIONS
 
+option(QGFX_DEBUG "Enable Qgfx verification, logging, and debugging" OFF)
+
+if(QGFX_DEBUG)
+    target_compile_definitions(Qgfx PUBLIC QGFX_DEBUG=1)
+endif()
+
+# RENDERING BACKEND OPTIONS
+
 option(QGFX_NO_VULKAN "Disable Vulkan backend" OFF)
 
 # QGFX TARGET RENDERING BACKEND CONFIGURATION
@@ -60,20 +68,26 @@ target_include_directories(Qgfx PUBLIC ${QGFX_INCLUDE_DIR})
 set(QGFX_INCLUDE_FILES 
         # Main Include File
         ${QGFX_INCLUDE_DIR}/Qgfx/Qgfx.hpp
+        # Common Include FIles
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/DebugOutput.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/Error.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/FormatString.hpp
         # Platform Include Files
         ${QGFX_INCLUDE_DIR}/Qgfx/Platform/Atomics.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Platform/NativeWindow.hpp
         # Basic Platform Implementation
         ${QGFX_INCLUDE_DIR}/Qgfx/Platform/Basic/BasicAtomics.hpp
         # Graphics Include Files
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/APIInfo.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/GraphicsTypes.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IInstance.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IObject.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IRenderDevice.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ISwapChain.hpp)
 
 set(QGFX_SOURCE_FILES
-        # Win32 Platform Implementation
-        ${QGFX_SOURCE_DIR}/Platform/Win32/Win32Atomics.cpp)
+        # Common Implementation
+        ${QGFX_SOURCE_DIR}/Common/DebugOutput.cpp)
 
 if(${QGFX_PLATFORM_WIN32})
     # PLATFORM_WIN32 specific
@@ -96,10 +110,13 @@ if(${QGFX_VULKAN_SUPPORTED})
     target_link_libraries(Qgfx PUBLIC quantumvk)
 
     set(QGFX_INCLUDE_FILES ${QGFX_INCLUDE_FILES}
-                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/InstanceVk.hpp)
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/BaseVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/InstanceVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/RenderDeviceVk.hpp)
 
     set(QGFX_SOURCE_FILES ${QGFX_SOURCE_FILES} 
-                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/InstanceVk.cpp)
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/InstanceVk.cpp
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/RenderDeviceVk.cpp)
 
     target_compile_definitions(Qgfx PUBLIC QGFX_VULKAN_SUPPORTED=1)
 
