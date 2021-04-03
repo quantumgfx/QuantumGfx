@@ -2,9 +2,9 @@
 
 namespace Qgfx
 {
-
-	struct APIInfo
+	class ITexture
 	{
-		uint32_t word;
+	public:
+
 	};
 }

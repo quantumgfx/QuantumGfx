@@ -1,18 +1,24 @@
 #pragma once
 
-#include "APIInfo.hpp"
 #include "GraphicsTypes.hpp"
+#include "IObject.hpp"
 
 namespace Qgfx
 {
-	class IInstance
+	class IInstance : public IObject
 	{
 	public:
+
+		IInstance(RefCounter* pRefCounter)
+			: IObject(pRefCounter)
+		{
+		}
 
 		virtual ~IInstance() = default;
 
 		virtual const APIInfo& GetAPIInfo() const = 0;
 
 		virtual GraphicsInstanceType GetType() const = 0;
+
 	};
 }

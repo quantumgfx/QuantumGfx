@@ -1,10 +1,12 @@
 #pragma once
 
 #include "BaseVk.hpp"
+#include "InstanceVk.hpp"
 
+#include "../IInstance.hpp"
 #include "../IRenderDevice.hpp"
 
-#include "InstanceVk.hpp"
+#include "../../Common/RefAutoPtr.hpp"
 
 namespace Qgfx
 {
@@ -12,13 +14,20 @@ namespace Qgfx
 	{
 	public:
 
+		struct VkFeatureSupport
+		{
+			bool bTimelineSemaphore = false;
+		};
+
 	private:
 
-		RenderDeviceVk(InstanceVk Instance);
+		RenderDeviceVk(RefCounter* pRefCounter, InstanceVk* pInstance);
 
 		~RenderDeviceVk();
 
 	private:
+
+		RefAutoPtr<InstanceVk> m_spInstance;
 
 		vkq::PhysicalDevice m_PhysicalDevice;
 		vkq::Device m_LogicalDevice;

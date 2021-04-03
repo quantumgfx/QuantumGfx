@@ -71,23 +71,35 @@ set(QGFX_INCLUDE_FILES
         # Common Include FIles
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/DebugOutput.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/Error.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/FlagsEnum.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/FormatString.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/MemoryAllocator.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/SpinLock.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/RefAutoPtr.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/RefCountedObject.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/ValidatedCast.hpp
         # Platform Include Files
         ${QGFX_INCLUDE_DIR}/Qgfx/Platform/Atomics.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Platform/NativeWindow.hpp
         # Basic Platform Implementation
         ${QGFX_INCLUDE_DIR}/Qgfx/Platform/Basic/BasicAtomics.hpp
         # Graphics Include Files
-        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/APIInfo.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Forward.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/GraphicsTypes.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IBuffer.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IFence.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IInstance.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IObject.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IRenderContext.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IRenderDevice.hpp
-        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ISwapChain.hpp)
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ISampler.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ISwapChain.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ITexture.hpp)
 
 set(QGFX_SOURCE_FILES
         # Common Implementation
-        ${QGFX_SOURCE_DIR}/Common/DebugOutput.cpp)
+        ${QGFX_SOURCE_DIR}/Common/DebugOutput.cpp
+        ${QGFX_SOURCE_DIR}/Common/SpinLock.cpp)
 
 if(${QGFX_PLATFORM_WIN32})
     # PLATFORM_WIN32 specific

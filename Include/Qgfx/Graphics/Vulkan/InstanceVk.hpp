@@ -33,12 +33,7 @@ namespace Qgfx
 	{
 	public:
 
-		InstanceVk(const InstanceVkCreateInfo& CreateInfo);
-
-		InstanceVk(vkq::Loader Loader, vkq::Instance Instance)
-			: m_Loader(Loader), m_Instance(Instance)
-		{
-		}
+		InstanceVk(RefCounter* pRefCounter, const InstanceVkCreateInfo& CreateInfo);
 		
 		virtual ~InstanceVk();
 
@@ -48,9 +43,7 @@ namespace Qgfx
 
 		const std::vector<vkq::PhysicalDevice> EnumeratePhysicalDevices();
 
-		IRenderDevice* CreateRenderDevice();
-
-		void DestroyRenderDevice(IRenderDevice* pRenderDevice);
+		void CreateRenderDevice(IRenderDevice** ppDevice);
 
 		/**
 		 * @brief Gets a handle to the vkq::Loader object from the quantumvk library, used to interface with the native Vulkan API
@@ -72,5 +65,7 @@ namespace Qgfx
 
 		APIInfo m_APIInfo = {};
 	};
+
+	void CreateInstanceVk(const InstanceVkCreateInfo& CreateInfo, InstanceVk** ppInstance);
 
 }

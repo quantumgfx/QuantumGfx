@@ -3,189 +3,95 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "Forward.hpp"
+
+#include "../Common/FlagsEnum.hpp"
 #include "../Platform/Atomics.hpp"
 #include "../Platform/NativeWindow.hpp"
 
-#include "APIInfo.hpp"
-
 namespace Qgfx
 {
-
-    template <typename BitType>
-    class Flags
+    struct APIInfo
     {
-    public:
-        using MaskType = typename std::underlying_type<BitType>::type;
-
-        // constructors
-        constexpr Flags() noexcept
-            : m_mask(0)
-        {}
-
-        constexpr Flags(BitType bit) noexcept
-            : m_mask(static_cast<MaskType>(bit))
-        {}
-
-        constexpr Flags(Flags<BitType> const& rhs) noexcept = default;
-
-        constexpr explicit Flags(MaskType flags) noexcept
-            : m_mask(flags)
-        {}
-
-        // relational operators
-        //auto operator<=>(Flags<BitType> const&) const = default;
-        constexpr bool operator<(Flags<BitType> const& rhs) const noexcept
-        {
-            return m_mask < rhs.m_mask;
-        }
-
-        constexpr bool operator<=(Flags<BitType> const& rhs) const noexcept
-        {
-            return m_mask <= rhs.m_mask;
-        }
-
-        constexpr bool operator>(Flags<BitType> const& rhs) const noexcept
-        {
-            return m_mask > rhs.m_mask;
-        }
-
-        constexpr bool operator>=(Flags<BitType> const& rhs) const noexcept
-        {
-            return m_mask >= rhs.m_mask;
-        }
-
-        constexpr bool operator==(Flags<BitType> const& rhs) const noexcept
-        {
-            return m_mask == rhs.m_mask;
-        }
-
-        constexpr bool operator!=(Flags<BitType> const& rhs) const noexcept
-        {
-            return m_mask != rhs.m_mask;
-        }
-
-        // logical operator
-        constexpr bool operator!() const noexcept
-        {
-            return !m_mask;
-        }
-
-        // bitwise operators
-        constexpr Flags<BitType> operator&(Flags<BitType> const& rhs) const noexcept
-        {
-            return Flags<BitType>(m_mask & rhs.m_mask);
-        }
-
-        constexpr Flags<BitType> operator|(Flags<BitType> const& rhs) const noexcept
-        {
-            return Flags<BitType>(m_mask | rhs.m_mask);
-        }
-
-        constexpr Flags<BitType> operator^(Flags<BitType> const& rhs) const noexcept
-        {
-            return Flags<BitType>(m_mask ^ rhs.m_mask);
-        }
-
-        constexpr Flags<BitType> operator~() const noexcept
-        {
-            return Flags<BitType>(m_mask ^ FlagTraits<BitType>::allFlags);
-        }
-
-        // assignment operators
-        constexpr Flags<BitType>& operator=(Flags<BitType> const& rhs) noexcept = default;
-
-        constexpr Flags<BitType>& operator|=(Flags<BitType> const& rhs) noexcept
-        {
-            m_mask |= rhs.m_mask;
-            return *this;
-        }
-
-        constexpr Flags<BitType>& operator&=(Flags<BitType> const& rhs) noexcept
-        {
-            m_mask &= rhs.m_mask;
-            return *this;
-        }
-
-        constexpr Flags<BitType>& operator^=(Flags<BitType> const& rhs) noexcept
-        {
-            m_mask ^= rhs.m_mask;
-            return *this;
-        }
-
-        // cast operators
-        explicit constexpr operator bool() const noexcept
-        {
-            return !!m_mask;
-        }
-
-        explicit constexpr operator MaskType() const noexcept
-        {
-            return m_mask;
-        }
-    private:
-        MaskType  m_mask;
+        uint32_t word;
     };
-
-    template <typename BitType>
-    constexpr bool operator<(BitType bit, Flags<BitType> const& flags) noexcept
-    {
-        return flags.operator>(bit);
-    }
-
-    template <typename BitType>
-    constexpr bool operator<=(BitType bit, Flags<BitType> const& flags) noexcept
-    {
-        return flags.operator>=(bit);
-    }
-
-    template <typename BitType>
-    constexpr bool operator>(BitType bit, Flags<BitType> const& flags) noexcept
-    {
-        return flags.operator<(bit);
-    }
-
-    template <typename BitType>
-    constexpr bool operator>=(BitType bit, Flags<BitType> const& flags) noexcept
-    {
-        return flags.operator<=(bit);
-    }
-
-    template <typename BitType>
-    constexpr bool operator==(BitType bit, Flags<BitType> const& flags) noexcept
-    {
-        return flags.operator==(bit);
-    }
-
-    template <typename BitType>
-    constexpr bool operator!=(BitType bit, Flags<BitType> const& flags) noexcept
-    {
-        return flags.operator!=(bit);
-    }
-
-    // bitwise operators
-    template <typename BitType>
-    constexpr Flags<BitType> operator&(BitType bit, Flags<BitType> const& flags) noexcept
-    {
-        return flags.operator&(bit);
-    }
-
-    template <typename BitType>
-    constexpr Flags<BitType> operator|(BitType bit, Flags<BitType> const& flags) noexcept
-    {
-        return flags.operator|(bit);
-    }
-
-    template <typename BitType>
-    constexpr Flags<BitType> operator^(BitType bit, Flags<BitType> const& flags) noexcept
-    {
-        return flags.operator^(bit);
-    }
 
     enum class GraphicsInstanceType
     {
         Vulkan = 1,
     };
 
+    enum class CPUAccessFlagBits
+    {
+        None = 0,
+        Read = 0x1,
+        Write = 0x2
+    };
+
+    template<>
+    struct EnableEnumFlags<CPUAccessFlagBits>
+    {
+        static const bool bEnabled = true;
+    };
+
+    using CPUAccessFlags = Flags<CPUAccessFlagBits>;
+
+    enum class BufferState
+    {
+        Vertex = 0,
+        Uniform,
+        Index,
+        Indirect,
+        ShaderResource,
+        UnorderedAccess,
+        TransferDst,
+        TransferSrc
+    };
+
+    enum class BufferUsageFlagBits
+    {
+        None = 0x00,
+        Vertex = 0x01,
+        Uniform = 0x02,
+        Index = 0x04,
+        Indirect = 0x08,
+        ShaderResource = 0x10,
+        UnorderedAccess = 0x20,
+    };
+
+    template<>
+    struct EnableEnumFlags<BufferUsageFlagBits>
+    {
+        static const bool bEnabled = true;
+    };
+
+    using BufferUsageFlags = Flags<BufferUsageFlagBits>;
+
+
+    enum class BufferMemoryType
+    {
+        /**
+         * @brief A resource that can only be read by the GPU. It cannot be written by the GPU, and can not be accessed at all by the CPU. \n
+         * Static buffers do not allow CPU access and must use CPUAccess::None.
+        */
+        Immutable = 0,
+        Default,
+        Dynamic,
+        Staging,
+        Unified,
+    };
+
+    enum class ImageState
+    {
+        RenderTarget,
+        DepthReadOnly,
+        Depth,
+        ShaderResource,
+        UnorderedAccess,
+        TransferDst,
+        TransferSrc,
+        Present,
+    };
 
     enum class TextureFormat
     {
@@ -286,17 +192,81 @@ namespace Qgfx
         HorizontalMirrorRotate270,
     };
 
+    enum class Filter
+    {
+        Nearest = 0,
+        Linear,
+    };
+
+    enum class MipMode
+    {
+        Nearest = 0,
+        Linear,
+    };
+
+    /**
+     * @brief Defines a comparison operation.
+    */
+    enum class CompareOp
+    {
+        Never = 0,
+        Less,
+        Equal,
+        LessOrEqual,
+        Greater,
+        NotEqual,
+        GreaterOrEqual,
+        Always,
+    };
+
+    /**
+     * @brief Defines the technique used to resolve texture coordinates that outside of the boundaries of a texture.
+    */
+    enum class TextureAddressMode
+    {
+        Wrap,
+        Mirror,
+        Clamp,
+        Border,
+    };
+
+    struct BufferDesc
+    {
+        uint32_t SizeInBytes = 0;
+
+        BufferUsageFlags Usage = {};
+
+        BufferMemoryType MemoryType = BufferMemoryType::Immutable;
+
+        CPUAccessFlags CPUAccess = CPUAccessFlagBits::None;
+    };
+
     struct SwapChainDesc
     {
         uint32_t Width = 0;
         uint32_t Height = 0;
-        
+
         uint32_t BufferCount = 3;
-        
+
         TextureFormat eColorBufferFormat = TextureFormat::RGBA8UnormSrgb;
         TextureFormat eDepthBufferFormat = TextureFormat::D32Float;
 
         SurfaceTransform PreTransform = SurfaceTransform::Optimal;
     };
 
+    enum class DeviceFeatureState
+    {
+        Disabled = 0,
+        Enabled,
+        Optional
+    };
+
+    struct DeviceFeatures
+    {
+        DeviceFeatureState IndirectRendering = DeviceFeatureState::Disabled;
+        DeviceFeatureState WireFrameFill = DeviceFeatureState::Disabled;
+        DeviceFeatureState ComputeShaders = DeviceFeatureState::Disabled;
+        DeviceFeatureState TesselationShaders = DeviceFeatureState::Disabled;
+        DeviceFeatureState GeometryShaders = DeviceFeatureState::Disabled;
+    };
 }

@@ -1,11 +1,13 @@
 #include "Qgfx/Graphics/Vulkan/InstanceVk.hpp"
+#include "Qgfx/Graphics/Vulkan/RenderDeviceVk.hpp"
 #include "Qgfx/Common/Error.hpp"
 
 #include <vector>
 
 namespace Qgfx
 {
-	InstanceVk::InstanceVk(const InstanceVkCreateInfo& CreateInfo)
+	InstanceVk::InstanceVk(RefCounter* pRefCounter, const InstanceVkCreateInfo& CreateInfo)
+		: IInstance(pRefCounter)
 	{
 		m_Loader = vkq::Loader::create(CreateInfo.pfnLoaderHandle);
 
@@ -27,7 +29,6 @@ namespace Qgfx
 				QGFX_LOG_ERROR("Validation enabled but VK_LAYER_KHRONOS_validation is not available. Make sure the proper Vulkan SDK is installed, and the appropriate pfnLoaderHandle provided.");
 			}
 
-#ifdef VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 			if (m_Loader.isInstanceExtensionSupported(VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
 			{
 				EnabledExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -36,7 +37,6 @@ namespace Qgfx
 			{
 				QGFX_LOG_ERROR("Validation enabled but VK_EXT_DEBUG_UTILS_EXTENSION not supported.");
 			}
-#endif	
 		}
 
 		m_Instance = vkq::InstanceFactory(m_Loader)
@@ -54,5 +54,16 @@ namespace Qgfx
 		m_Loader.destroy();
 	}
 
+	void InstanceVk::CreateRenderDevice(IRenderDevice** ppDevice)
+	{
+		RenderDeviceVk* pRenderDevice = MakeRefCountedObj<RenderDeviceVk>()(this);
+		*ppDevice = pRenderDevice;
+	}
+
 	
+	void CreateInstanceVk(const InstanceVkCreateInfo& CreateInfo, InstanceVk** ppInstance)
+	{
+		*ppInstance = MakeRefCountedObj<InstanceVk>()(CreateInfo);
+	}
+
 }
