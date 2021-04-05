@@ -10,7 +10,19 @@
 
 namespace Qgfx
 {
-    template <typename... ArgsType>
+    template <bool>
+    void ThrowIf(std::string&&)
+    {
+    }
+
+    template <>
+    inline void ThrowIf<true>(std::string&& msg)
+    {
+        throw std::runtime_error(std::move(msg));
+    }
+
+
+    template <bool bThrowException, typename... ArgsType>
     void LogError(bool IsFatal, const char* Function, const char* FullFilePath, int Line, const ArgsType&... Args)
     {
         std::string FileName(FullFilePath);
@@ -21,22 +33,22 @@ namespace Qgfx
         auto Msg = FormatString(Args...);
 
         WriteDebugMessage(IsFatal ? DebugMessageSeverity::FatalError : DebugMessageSeverity::Error, Msg.c_str(), Function, FullName.c_str(), Line);
+
+        ThrowIf<bThrowException>(std::move(Msg));
     }
 }
-
-#ifdef QGFX_DEBUG
 
 #define QGFX_LOG_ERROR(...)                                                                                 \
     do                                                                                                 \
     {                                                                                                  \
-        ::Qgfx::LogError(false, __FUNCTION__, __FILE__, __LINE__, ##__VA_ARGS__); \
+        ::Qgfx::LogError<false>(false, __FUNCTION__, __FILE__, __LINE__, ##__VA_ARGS__); \
     } while (false)
 
 
 #define QGFX_LOG_FATAL_ERROR(...)                                                                          \
     do                                                                                                \
     {                                                                                                 \
-        ::Qgfx::LogError(true, __FUNCTION__, __FILE__, __LINE__, ##__VA_ARGS__); \
+        ::Qgfx::LogError<false>(true, __FUNCTION__, __FILE__, __LINE__, ##__VA_ARGS__); \
     } while (false)
 
 #define QGFX_LOG_ERROR_ONCE(...)             \
@@ -50,6 +62,18 @@ namespace Qgfx
         }                               \
     } while (false)
 
+#define QGFX_LOG_ERROR_AND_THROW(...)                                                                      \
+    do                                                                                                \
+    {                                                                                                 \
+        ::Qgfx::LogError<true>(false, __FUNCTION__, __FILE__, __LINE__, ##__VA_ARGS__); \
+    } while (false)
+
+#define QGFX_LOG_FATAL_ERROR_AND_THROW(...)                                                               \
+    do                                                                                               \
+    {                                                                                                \
+        ::Qgfx::LogError<true>(true, __FUNCTION__, __FILE__, __LINE__, ##__VA_ARGS__); \
+    } while (false)
+
 #define QGFX_LOG_DEBUG_MESSAGE(Severity, ...)                                                                                            \
     do                                                                                                                              \
     {                                                                                                                               \
@@ -61,7 +85,6 @@ namespace Qgfx
 #define QGFX_LOG_ERROR_MESSAGE(...)       QGFX_LOG_DEBUG_MESSAGE(::Qgfx::DebugMessageSeverity::Error, ##__VA_ARGS__)
 #define QGFX_LOG_WARNING_MESSAGE(...)     QGFX_LOG_DEBUG_MESSAGE(::Qgfx::DebugMessageSeverity::Warning, ##__VA_ARGS__)
 #define QGFX_LOG_INFO_MESSAGE(...)        QGFX_LOG_DEBUG_MESSAGE(::Qgfx::DebugMessageSeverity::Info, ##__VA_ARGS__)
-
 
 #define QGFX_LOG_DEBUG_MESSAGE_ONCE(Severity, ...)           \
     do                                                  \
@@ -78,6 +101,8 @@ namespace Qgfx
 #define QGFX_LOG_ERROR_MESSAGE_ONCE(...)       QGFX_LOG_DEBUG_MESSAGE_ONCE(::Qgfx::DebugMessageSeverity::Error, ##__VA_ARGS__)
 #define QGFX_LOG_WARNING_MESSAGE_ONCE(...)     QGFX_LOG_DEBUG_MESSAGE_ONCE(::Qgfx::DebugMessageSeverity::Warning, ##__VA_ARGS__)
 #define QGFX_LOG_INFO_MESSAGE_ONCE(...)        QGFX_LOG_DEBUG_MESSAGE_ONCE(::Qgfx::DebugMessageSeverity::Info, ##__VA_ARGS__)
+
+#ifdef QGFX_DEBUG
 
 #define QGFX_ASSERTION_FAILED(Message, ...)                                       \
         do                                                                       \
@@ -102,20 +127,21 @@ namespace Qgfx
 
 #else
 
-#define QGFX_LOG_ERROR(...)do{}while(false)
-#define QGFX_LOG_FATAL_ERROR(...)do{}while(false)
-#define QGFX_LOG_ERROR_ONCE(...)do{}while(false)
-#define QGFX_LOG_DEBUG_MESSAGE(...)do{}while(false)
-#define QGFX_LOG_FATAL_ERROR_MESSAGE(...)do{}while(false)
-#define QGFX_LOG_ERROR_MESSAGE(...)do{}while(false)
-#define QGFX_LOG_WARNING_MESSAGE(...)do{}while(false)
-#define QGFX_LOG_INFO_MESSAGE(...)do{}while(false)
-#define QGFX_LOG_DEBUG_MESSAGE_ONCE(...)do{}while(false)
-#define QGFX_LOG_FATAL_ERROR_MESSAGE_ONCE(...)do{}while(false)
-#define QGFX_LOG_ERROR_MESSAGE_ONCE(...)do{}while(false)
-#define QGFX_LOG_WARNING_MESSAGE_ONCE(...)do{}while(false)
-#define QGFX_LOG_INFO_MESSAGE_ONCE(...)do{}while(false)
-#define QGFX_LOG_ERROR(...)do{}while(false)
+//#define QGFX_LOG_ERROR(...)do{}while(false)
+//#define QGFX_LOG_FATAL_ERROR(...)do{}while(false)
+//#define QGFX_LOG_ERROR_ONCE(...)do{}while(false)
+//#define QGFX_LOG_DEBUG_MESSAGE(...)do{}while(false)
+//#define QGFX_LOG_FATAL_ERROR_MESSAGE(...)do{}while(false)
+//#define QGFX_LOG_ERROR_MESSAGE(...)do{}while(false)
+//#define QGFX_LOG_WARNING_MESSAGE(...)do{}while(false)
+//#define QGFX_LOG_INFO_MESSAGE(...)do{}while(false)
+//#define QGFX_LOG_DEBUG_MESSAGE_ONCE(...)do{}while(false)
+//#define QGFX_LOG_FATAL_ERROR_MESSAGE_ONCE(...)do{}while(false)
+//#define QGFX_LOG_ERROR_MESSAGE_ONCE(...)do{}while(false)
+//#define QGFX_LOG_WARNING_MESSAGE_ONCE(...)do{}while(false)
+//#define QGFX_LOG_INFO_MESSAGE_ONCE(...)do{}while(false)
+//#define QGFX_LOG_ERROR(...)do{}while(false)
+
 #define QGFX_ASSERTION_FAILED(...)do{}while(false)
 #define QGFX_UNEXPECTED(...)do{}while(false)
 #define QGFX_UNSUPPORTED(...)do{}while(false)

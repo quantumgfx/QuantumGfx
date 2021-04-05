@@ -43,7 +43,7 @@ namespace Qgfx
 
 		const std::vector<vkq::PhysicalDevice> EnumeratePhysicalDevices();
 
-		void CreateRenderDevice(IRenderDevice** ppDevice);
+		void CreateRenderDevice(const RenderDeviceCreateInfo& CreateInfo, vkq::PhysicalDevice VkPhDev, IRenderDevice** ppDevice);
 
 		/**
 		 * @brief Gets a handle to the vkq::Loader object from the quantumvk library, used to interface with the native Vulkan API

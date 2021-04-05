@@ -11,10 +11,9 @@
 
 namespace Qgfx
 {
-    struct APIInfo
-    {
-        uint32_t word;
-    };
+    ////////////////////////////
+    // Enums ///////////////////
+    ////////////////////////////
 
     enum class GraphicsInstanceType
     {
@@ -230,29 +229,9 @@ namespace Qgfx
         Border,
     };
 
-    struct BufferDesc
-    {
-        uint32_t SizeInBytes = 0;
-
-        BufferUsageFlags Usage = {};
-
-        BufferMemoryType MemoryType = BufferMemoryType::Immutable;
-
-        CPUAccessFlags CPUAccess = CPUAccessFlagBits::None;
-    };
-
-    struct SwapChainDesc
-    {
-        uint32_t Width = 0;
-        uint32_t Height = 0;
-
-        uint32_t BufferCount = 3;
-
-        TextureFormat eColorBufferFormat = TextureFormat::RGBA8UnormSrgb;
-        TextureFormat eDepthBufferFormat = TextureFormat::D32Float;
-
-        SurfaceTransform PreTransform = SurfaceTransform::Optimal;
-    };
+    /////////////////////////
+    // Device structs ///////
+    /////////////////////////
 
     enum class DeviceFeatureState
     {
@@ -263,10 +242,20 @@ namespace Qgfx
 
     struct DeviceFeatures
     {
-        DeviceFeatureState IndirectRendering = DeviceFeatureState::Disabled;
-        DeviceFeatureState WireFrameFill = DeviceFeatureState::Disabled;
         DeviceFeatureState ComputeShaders = DeviceFeatureState::Disabled;
         DeviceFeatureState TesselationShaders = DeviceFeatureState::Disabled;
         DeviceFeatureState GeometryShaders = DeviceFeatureState::Disabled;
+        DeviceFeatureState IndirectRendering = DeviceFeatureState::Disabled;
+        DeviceFeatureState WireFrameFill = DeviceFeatureState::Disabled;
+    };
+
+    struct APIInfo
+    {
+        uint32_t word;
+    };
+
+    struct RenderDeviceCreateInfo
+    {
+        DeviceFeatures Features;
     };
 }

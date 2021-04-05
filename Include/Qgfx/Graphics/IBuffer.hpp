@@ -4,6 +4,17 @@
 
 namespace Qgfx
 {
+	struct BufferDesc
+	{
+		uint32_t SizeInBytes = 0;
+
+		BufferUsageFlags Usage = {};
+
+		BufferMemoryType MemoryType = BufferMemoryType::Immutable;
+
+		CPUAccessFlags CPUAccess = CPUAccessFlagBits::None;
+	};
+
 	class IBuffer
 	{
 	public:

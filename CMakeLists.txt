@@ -124,11 +124,13 @@ if(${QGFX_VULKAN_SUPPORTED})
     set(QGFX_INCLUDE_FILES ${QGFX_INCLUDE_FILES}
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/BaseVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/InstanceVk.hpp
-                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/RenderDeviceVk.hpp)
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/RenderDeviceVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/SwapChainVk.hpp)
 
     set(QGFX_SOURCE_FILES ${QGFX_SOURCE_FILES} 
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/InstanceVk.cpp
-                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/RenderDeviceVk.cpp)
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/RenderDeviceVk.cpp
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/SwapChainVk.cpp)
 
     target_compile_definitions(Qgfx PUBLIC QGFX_VULKAN_SUPPORTED=1)
 

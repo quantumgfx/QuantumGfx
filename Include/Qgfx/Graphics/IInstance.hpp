@@ -3,6 +3,8 @@
 #include "GraphicsTypes.hpp"
 #include "IObject.hpp"
 
+#include "IRenderDevice.hpp"
+
 namespace Qgfx
 {
 	class IInstance : public IObject

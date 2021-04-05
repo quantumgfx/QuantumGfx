@@ -6,6 +6,11 @@
 
 namespace Qgfx
 {
+	void CreateInstanceVk(const InstanceVkCreateInfo& CreateInfo, InstanceVk** ppInstance)
+	{
+		*ppInstance = MakeRefCountedObj<InstanceVk>()(CreateInfo);
+	}
+
 	InstanceVk::InstanceVk(RefCounter* pRefCounter, const InstanceVkCreateInfo& CreateInfo)
 		: IInstance(pRefCounter)
 	{
@@ -16,7 +21,9 @@ namespace Qgfx
 
 		EnabledExtensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
 
+#ifdef QGFX_PLATFORM_WIN32
 		EnabledExtensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#endif
 
 		if (CreateInfo.bEnableValidation)
 		{
@@ -39,13 +46,20 @@ namespace Qgfx
 			}
 		}
 
-		m_Instance = vkq::InstanceFactory(m_Loader)
-			.setAppName(CreateInfo.AppName).setAppVersion(CreateInfo.AppVersion)
-			.setEngineName(CreateInfo.EngineName).setEngineVersion(CreateInfo.EngineVersion)
-			.enableExtensions(EnabledExtensions)
-			.enableLayers(EnabledLayers)
-			.requireApiVersion(1, 2, 0)
-			.build();
+		try
+		{
+			m_Instance = vkq::InstanceFactory(m_Loader)
+				.setAppName(CreateInfo.AppName).setAppVersion(CreateInfo.AppVersion)
+				.setEngineName(CreateInfo.EngineName).setEngineVersion(CreateInfo.EngineVersion)
+				.enableExtensions(EnabledExtensions)
+				.enableLayers(EnabledLayers)
+				.requireApiVersion(1, 2, 0)
+				.build();
+		}
+		catch (const vk::SystemError& Error)
+		{
+			QGFX_LOG_ERROR_AND_THROW("vkCreateInstance failed with error: ", Error.what());
+		}
 	}
 	
 	InstanceVk::~InstanceVk()
@@ -54,16 +68,10 @@ namespace Qgfx
 		m_Loader.destroy();
 	}
 
-	void InstanceVk::CreateRenderDevice(IRenderDevice** ppDevice)
+	void InstanceVk::CreateRenderDevice(const RenderDeviceCreateInfo& CreateInfo, vkq::PhysicalDevice VkPhDev, IRenderDevice** ppDevice)
 	{
-		RenderDeviceVk* pRenderDevice = MakeRefCountedObj<RenderDeviceVk>()(this);
+		RenderDeviceVk* pRenderDevice = MakeRefCountedObj<RenderDeviceVk>()(this, CreateInfo, VkPhDev);
 		*ppDevice = pRenderDevice;
-	}
-
-	
-	void CreateInstanceVk(const InstanceVkCreateInfo& CreateInfo, InstanceVk** ppInstance)
-	{
-		*ppInstance = MakeRefCountedObj<InstanceVk>()(CreateInfo);
 	}
 
 }
