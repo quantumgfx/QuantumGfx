@@ -68,7 +68,8 @@ target_include_directories(Qgfx PUBLIC ${QGFX_INCLUDE_DIR})
 set(QGFX_INCLUDE_FILES 
         # Main Include File
         ${QGFX_INCLUDE_DIR}/Qgfx/Qgfx.hpp
-        # Common Include FIles
+        # Common Include Files
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/ArrayProxy.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/DebugOutput.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/Error.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/FlagsEnum.hpp
@@ -87,8 +88,8 @@ set(QGFX_INCLUDE_FILES
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Forward.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/GraphicsTypes.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IBuffer.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IEngineFactory.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IFence.hpp
-        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IInstance.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IObject.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IRenderContext.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IRenderDevice.hpp
@@ -113,6 +114,9 @@ if(${QGFX_PLATFORM_WIN32})
 
     target_compile_definitions(Qgfx PUBLIC QGFX_PLATFORM_WIN32=1)
 
+    if(${QGFX_VULKAN_SUPPORTED})
+        target_compile_definitions(Qgfx PUBLIC VK_USE_PLATFORM_WIN32_KHR NOMINMAX)
+    endif()
 endif()
 
 if(${QGFX_VULKAN_SUPPORTED})
@@ -123,14 +127,18 @@ if(${QGFX_VULKAN_SUPPORTED})
 
     set(QGFX_INCLUDE_FILES ${QGFX_INCLUDE_FILES}
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/BaseVk.hpp
-                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/InstanceVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/EngineFactoryVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/RenderContextVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/RenderDeviceVk.hpp
-                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/SwapChainVk.hpp)
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/SwapChainVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/TypeConversionsVk.hpp)
 
     set(QGFX_SOURCE_FILES ${QGFX_SOURCE_FILES} 
-                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/InstanceVk.cpp
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/EngineFactoryVk.cpp
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/RenderContextVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/RenderDeviceVk.cpp
-                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/SwapChainVk.cpp)
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/SwapChainVk.cpp
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/TypeConversionsVk.cpp)
 
     target_compile_definitions(Qgfx PUBLIC QGFX_VULKAN_SUPPORTED=1)
 

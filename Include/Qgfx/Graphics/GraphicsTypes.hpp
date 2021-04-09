@@ -158,7 +158,12 @@ namespace Qgfx
     {
         None = 0x00,
         RenderTarget = 0x01,
+        ShaderInput = 0x02,
+        TransferSrc = 0x04,
+        TransferDst = 0x08
     };
+
+    using SwapChainUsageFlags = Flags<SwapChainUsageFlagBits>;
 
     /// The transform applied to the image content prior to presentation.
     enum class SurfaceTransform
@@ -227,6 +232,13 @@ namespace Qgfx
         Mirror,
         Clamp,
         Border,
+    };
+
+    enum class RenderContextType
+    {
+        Universal = 0,
+        AsyncCompute,
+        AsyncTransfer,
     };
 
     /////////////////////////

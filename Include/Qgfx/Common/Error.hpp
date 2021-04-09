@@ -78,7 +78,7 @@ namespace Qgfx
     do                                                                                                                              \
     {                                                                                                                               \
         auto _msg = ::Qgfx::FormatString(__VA_ARGS__); \
-        ::Qgfx::WriteDebugMessage(Severity, _msg.c_str(), nullptr, nullptr, 0) \
+        ::Qgfx::WriteDebugMessage(Severity, _msg.c_str(), nullptr, nullptr, 0); \
     } while (false)
 
 #define QGFX_LOG_FATAL_ERROR_MESSAGE(...) QGFX_LOG_DEBUG_MESSAGE(::Qgfx::DebugMessageSeverity::FatalError, ##__VA_ARGS__)

@@ -7,16 +7,16 @@
 
 namespace Qgfx
 {
-	class IInstance : public IObject
+	class IEngineFactory : public IObject
 	{
 	public:
 
-		IInstance(RefCounter* pRefCounter)
+		IEngineFactory(RefCounter* pRefCounter)
 			: IObject(pRefCounter)
 		{
 		}
 
-		virtual ~IInstance() = default;
+		virtual ~IEngineFactory() = default;
 
 		virtual const APIInfo& GetAPIInfo() const = 0;
 

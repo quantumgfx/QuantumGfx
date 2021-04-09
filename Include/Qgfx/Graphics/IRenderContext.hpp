@@ -12,13 +12,6 @@ namespace Qgfx
 	{
 	public:
 
-		enum class Type
-		{
-			Universal,
-			AsyncCompute,
-			AsyncTransfer,
-		};
-
 		IRenderContext(RefCounter* pRefCounter)
 			: IObject(pRefCounter)
 		{
@@ -30,7 +23,7 @@ namespace Qgfx
 		 * @brief Gets what type this render context is (ie, what sort of operations it supports).
 		 * @return The type of the render context.
 		*/
-		virtual Type GetType() = 0;
+		virtual RenderContextType GetType() = 0;
 
 		virtual void InvalidateState() = 0;
 
@@ -38,7 +31,7 @@ namespace Qgfx
 
 		virtual void WaitIdle() = 0;
 
-		virtual void Present(ISwapChain* pSwapChain) = 0;
+		virtual void Present(uint32_t NumSwapChains, ISwapChain** ppSwapChains) = 0;
 
 	};
 }

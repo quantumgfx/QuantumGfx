@@ -1,9 +1,9 @@
 #pragma once
 
 #include "BaseVk.hpp"
-#include "InstanceVk.hpp"
+#include "EngineFactoryVk.hpp"
 
-#include "../IInstance.hpp"
+#include "../IEngineFactory.hpp"
 #include "../IRenderDevice.hpp"
 
 #include "../../Common/RefAutoPtr.hpp"
@@ -12,19 +12,11 @@
 
 namespace Qgfx
 {
-	
+	class SwapChainVk;
 
 	class RenderDeviceVk final : public IRenderDevice
 	{
 	public:
-
-	private:
-
-		RenderDeviceVk(RefCounter* pRefCounter, InstanceVk* pInstance, const RenderDeviceCreateInfo& CreateInfo, vkq::PhysicalDevice VkPhDev);
-
-		~RenderDeviceVk();
-
-		virtual void CreateSwapChain(const SwapChainDesc& Desc, const NativeWindow& Window, IRenderContext* pContext, ISwapChain** ppSwapChain) override;
 
 		virtual void WaitIdle() override;
 
@@ -33,25 +25,44 @@ namespace Qgfx
 			return m_DeviceFeatures;
 		}
 
+		inline uint32_t GetNumSupportedQueues() { return m_NumSupportedQueues; }
+
+		void QueueWaitIdle(uint32_t QueueIndex);
+		void QueueSubmit(uint32_t QueueIndex, const vk::SubmitInfo& SubmitInfo, vk::Fence Fence);
+		void QueuePresent(uint32_t QueueIndex, const vk::PresentInfoKHR& PresentInfo);
+
+		vkq::Queue GetVkqQueue(uint32_t QueueIndex);
+		RenderContextType GetQueueType(uint32_t QueueIndex);
+
+		vkq::PhysicalDevice GetVkqPhysicalDevice() { return m_PhysicalDevice; }
+		vkq::Device GetVkqDevice() { return m_LogicalDevice; }
+		vkq::Instance GetVkqInstance() { return m_spEngineFactory->GetVkqInstance(); }
+
 	private:
 
-		RefAutoPtr<InstanceVk> m_spInstance;
+		RenderDeviceVk(RefCounter* pRefCounter, EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo);
+
+		~RenderDeviceVk();
+
+	private:
+
+		RefAutoPtr<EngineFactoryVk> m_spEngineFactory;
 
 		vkq::PhysicalDevice m_PhysicalDevice;
 		vkq::Device m_LogicalDevice;
 
 		DeviceFeatures m_DeviceFeatures;
 
-		uint32_t GraphicsQueueFamily = UINT32_MAX;
-		uint32_t GraphicsNumQueues = 0;
-		std::vector<vkq::Queue> GraphicsQueues;
+		uint32_t m_NumSupportedQueues = 0;
 
-		uint32_t ComputeQueueFamily = UINT32_MAX;
-		uint32_t ComputeNumQueues = 0;
-		std::vector<vkq::Queue> ComputeQueues;
+		struct QueueDesc
+		{
+			uint32_t FamilyIndex;
+			uint32_t Index;
+			DeviceQueueInfoVk Info;
+			vkq::Queue Handle;
+		};
 
-		uint32_t TransferQueueFamily = UINT32_MAX;
-		uint32_t TransferNumQueues = 0;
-		std::vector<vkq::Queue> TransferQueues;
+		std::vector<QueueDesc> m_Queues;
 	};
 }

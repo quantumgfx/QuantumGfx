@@ -5,7 +5,7 @@
 
 namespace Qgfx
 {
-    struct SwapChainDesc
+    struct SwapChainCreateInfo
     {
         uint32_t Width = 0;
         uint32_t Height = 0;
@@ -28,6 +28,11 @@ namespace Qgfx
         }
 
         virtual ~ISwapChain() = default;
+
+        virtual uint32_t GetWidth() = 0;
+        virtual uint32_t GetHeight() = 0;
+        virtual uint32_t GetBufferCount() = 0;
+        virtual SurfaceTransform GetSurfaceTransform() = 0;
 
 		virtual void Resize(uint32_t NewWidth, uint32_t NewHeight, SurfaceTransform NewPreTransform = SurfaceTransform::Optimal) = 0;
 	};

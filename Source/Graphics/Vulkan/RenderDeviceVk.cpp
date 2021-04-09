@@ -33,11 +33,11 @@ namespace Qgfx
 		}
 	}
 
-	RenderDeviceVk::RenderDeviceVk(RefCounter* pRefCounter, InstanceVk* Instance, const RenderDeviceCreateInfo& CreateInfo, vkq::PhysicalDevice VkPhDev)
+	RenderDeviceVk::RenderDeviceVk(RefCounter* pRefCounter, EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo)
 		: IRenderDevice(pRefCounter)
 	{
-		m_spInstance = Instance;
-		m_PhysicalDevice = VkPhDev;
+		m_spEngineFactory = pEngineFactory;
+		m_PhysicalDevice = CreateInfo.PhysicalDeviceVk;
 
 		// Features
 
@@ -53,7 +53,7 @@ namespace Qgfx
 		SupportedFeatures2.pNext = &Supported11Features;
 		Supported11Features.pNext = &Supported12Features;
 
-		m_PhysicalDevice.vkHandle().getFeatures2(&SupportedFeatures2, m_PhysicalDevice.dispatch());
+		m_PhysicalDevice.getFeatures2(&SupportedFeatures2);
 
 		vk::PhysicalDeviceFeatures2 EnabledFeatures2{};
 		vk::PhysicalDeviceFeatures& Enabled10Features = EnabledFeatures2.features;
@@ -70,8 +70,24 @@ namespace Qgfx
 		std::vector<const char*> EnabledExtensions{};
 		EnabledExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
-		// Queues
+		//////////////////////////
+		// Queues ////////////////
+		//////////////////////////
+
 		std::vector<vk::QueueFamilyProperties> QueueFamiles = m_PhysicalDevice.getQueueFamilyProperties();
+
+		std::vector<uint32_t> UniversalQueueFamilies{};
+		std::vector<uint32_t> ComputeQueueFamilies{};
+		std::vector<uint32_t> TransferQueueFamilies{};
+
+		struct QueueFamilyDesc
+		{
+			uint32_t QueueCount;
+			uint32_t CurrentIndex;
+		};
+
+		// Keeps track of the current index within each family
+		std::vector<uint32_t> CurrentQueueIndex{};
 		
 		for (size_t QueueFamilyIndex = 0; QueueFamilyIndex < QueueFamiles.size(); QueueFamilyIndex++)
 		{
@@ -86,73 +102,148 @@ namespace Qgfx
 #endif
 			if (QueueFamily.queueFlags & vk::QueueFlagBits::eGraphics)
 			{ // Supports Graphics, Compute, and Transfer
-				if (GraphicsQueueFamily == UINT32_MAX)
-				{
-					if (bSupportsPresentation)
-					{
-						GraphicsQueueFamily = QueueFamilyIndex;
-						GraphicsNumQueues = 1;
-					}
-				}
+				if(bSupportsPresentation)
+					UniversalQueueFamilies.push_back(QueueFamilyIndex);
 			}
 			else if (QueueFamily.queueFlags & vk::QueueFlagBits::eCompute)
 			{ // Supports Compute and Transfer
-				if (ComputeQueueFamily == UINT32_MAX)
-				{
-					ComputeQueueFamily = QueueFamilyIndex;
-					ComputeNumQueues = 1;
-				}
+				ComputeQueueFamilies.push_back(QueueFamilyIndex);
 			}
 			else if (QueueFamily.queueFlags & vk::QueueFlagBits::eTransfer)
 			{ // Supports Transfer
-				if (TransferQueueFamily == UINT32_MAX)
-				{
-					TransferQueueFamily = QueueFamilyIndex;
-					TransferNumQueues = 1;
-				}
+
+				TransferQueueFamilies.push_back(QueueFamilyIndex);
 			}
+
+			CurrentQueueIndex.push_back(0);
 		}
 
-		if (GraphicsQueueFamily == UINT32_MAX)
+		if (UniversalQueueFamilies.size() >= 1)
 		{
 			QGFX_LOG_ERROR_AND_THROW("Device doesn't support graphics queue family with present capibilities");
 		}
 
-		std::vector<vk::DeviceQueueCreateInfo> DeviceQueueCreateInfos{};
-
-		float pPriorities[] = { 1.0f };
-
-		vk::DeviceQueueCreateInfo GraphicsQueueFamilyCreateInfo{};
-		GraphicsQueueFamilyCreateInfo.pNext = nullptr;
-		GraphicsQueueFamilyCreateInfo.flags = {};
-		GraphicsQueueFamilyCreateInfo.pQueuePriorities = pPriorities;
-		GraphicsQueueFamilyCreateInfo.queueFamilyIndex = GraphicsQueueFamily;
-		GraphicsQueueFamilyCreateInfo.queueCount = GraphicsNumQueues;
-
-		DeviceQueueCreateInfos.push_back(GraphicsQueueFamilyCreateInfo);
-
-		if (ComputeQueueFamily != UINT32_MAX)
+		struct PerQueueFamily
 		{
-			vk::DeviceQueueCreateInfo ComputeQueueFamilyCreateInfo{};
-			ComputeQueueFamilyCreateInfo.pNext = nullptr;
-			ComputeQueueFamilyCreateInfo.flags = {};
-			ComputeQueueFamilyCreateInfo.pQueuePriorities = pPriorities;
-			ComputeQueueFamilyCreateInfo.queueFamilyIndex = ComputeQueueFamily;
-			ComputeQueueFamilyCreateInfo.queueCount = ComputeNumQueues;
+			vk::DeviceQueueCreateInfo CreateInfo;
+			std::vector<float> Priorities;
+		};
 
-			DeviceQueueCreateInfos.push_back(ComputeQueueFamilyCreateInfo);
+		std::vector<PerQueueFamily> PerQueueFamilyInfo;
+
+		for (uint32_t Index; Index < CreateInfo.NumRequestedQueues; Index++)
+		{
+			const DeviceQueueInfoVk& QueueInfo = CreateInfo.pRequestedQueues[Index];
+
+			uint32_t QueueFamily = UINT32_MAX;
+			uint32_t QueueIndex = UINT32_MAX;
+
+			//////////////////////
+			// Finds best queue //
+			//////////////////////
+
+			if (QueueFamily == UINT32_MAX && QueueInfo.Type == RenderContextType::AsyncTransfer)
+			{
+				for (uint32_t QueueFamilyIndex : TransferQueueFamilies)
+				{
+					if (CurrentQueueIndex[QueueFamilyIndex] < QueueFamiles[QueueFamilyIndex].queueCount)
+					{
+						QueueFamily = QueueFamilyIndex;
+						QueueIndex = CurrentQueueIndex[QueueFamilyIndex];
+						CurrentQueueIndex[QueueFamilyIndex] += 1;
+					}
+				}
+			}
+
+			if (QueueFamily == UINT32_MAX && (QueueInfo.Type == RenderContextType::AsyncTransfer ||
+											 QueueInfo.Type == RenderContextType::AsyncCompute))
+			{
+				for (uint32_t QueueFamilyIndex : ComputeQueueFamilies)
+				{
+					if (CurrentQueueIndex[QueueFamilyIndex] < QueueFamiles[QueueFamilyIndex].queueCount)
+					{
+						QueueFamily = QueueFamilyIndex;
+						QueueIndex = CurrentQueueIndex[QueueFamilyIndex];
+						CurrentQueueIndex[QueueFamilyIndex] += 1;
+					}
+				}
+			}
+
+			if (QueueFamily == UINT32_MAX && (QueueInfo.Type == RenderContextType::AsyncTransfer ||
+											 QueueInfo.Type == RenderContextType::AsyncCompute || 
+											 QueueInfo.Type == RenderContextType::Universal))
+			{
+				for (uint32_t QueueFamilyIndex : UniversalQueueFamilies)
+				{
+					if (CurrentQueueIndex[QueueFamilyIndex] < QueueFamiles[QueueFamilyIndex].queueCount)
+					{
+						QueueFamily = QueueFamilyIndex;
+						QueueIndex = CurrentQueueIndex[QueueFamilyIndex];
+						CurrentQueueIndex[QueueFamilyIndex] += 1;
+					}
+				}
+			}
+
+			///////////////////////
+			///////////////////////
+			///////////////////////
+
+			if (QueueFamily != UINT32_MAX)
+			{
+				while (QueueFamily >= PerQueueFamilyInfo.size())
+				{
+					vk::DeviceQueueCreateInfo QueueCreateInfo{};
+					QueueCreateInfo.pNext = nullptr;
+					QueueCreateInfo.flags = {};
+					QueueCreateInfo.pQueuePriorities = nullptr;
+					QueueCreateInfo.queueFamilyIndex = UINT32_MAX;
+					QueueCreateInfo.queueCount = 0;
+
+					PerQueueFamily PerFamily;
+					PerFamily.CreateInfo = QueueCreateInfo;
+					PerFamily.Priorities = {};
+
+					PerQueueFamilyInfo.push_back(PerFamily);
+				}
+
+				while (QueueIndex >= PerQueueFamilyInfo[QueueFamily].Priorities.size())
+				{
+					PerQueueFamilyInfo[QueueFamily].Priorities.push_back(0.0f);
+				}
+
+				PerQueueFamilyInfo[QueueFamily].Priorities[QueueIndex] = QueueInfo.Priority;
+				PerQueueFamilyInfo[QueueFamily].CreateInfo.pQueuePriorities = PerQueueFamilyInfo[QueueFamily].Priorities.data();
+				PerQueueFamilyInfo[QueueFamily].CreateInfo.queueFamilyIndex = QueueFamily;
+				PerQueueFamilyInfo[QueueFamily].CreateInfo.queueCount = QueueIndex;
+
+				QueueDesc Queue;
+				Queue.FamilyIndex = QueueFamily;
+				Queue.Index = QueueIndex;
+				Queue.Info = QueueInfo;
+				// Queue::Handle is filled after creating the device
+				m_Queues.push_back(Queue);
+			}
+			else
+			{
+				// No remaining queues can support a universal render type.
+				break;
+			}
+
+			m_NumSupportedQueues++;
 		}
 
-		if (TransferQueueFamily != UINT32_MAX)
-		{
-			vk::DeviceQueueCreateInfo TransferQueueFamilyCreateInfo{};
-			TransferQueueFamilyCreateInfo.pNext = nullptr;
-			TransferQueueFamilyCreateInfo.flags = {};
-			TransferQueueFamilyCreateInfo.pQueuePriorities = pPriorities;
-			TransferQueueFamilyCreateInfo.queueFamilyIndex = TransferQueueFamily;
-			TransferQueueFamilyCreateInfo.queueCount = TransferNumQueues;
+		////////////////////////
+		// Device Create Info //
+		////////////////////////
 
-			DeviceQueueCreateInfos.push_back(TransferQueueFamilyCreateInfo);
+		std::vector<vk::DeviceQueueCreateInfo> DeviceQueueCreateInfos{};
+
+		for (const PerQueueFamily& Info : PerQueueFamilyInfo)
+		{
+			if (Info.CreateInfo.queueCount > 0)
+			{
+				DeviceQueueCreateInfos.push_back(Info.CreateInfo);
+			}
 		}
 
 		vk::DeviceCreateInfo DeviceCreateInfo{};
@@ -175,28 +266,10 @@ namespace Qgfx
 			QGFX_LOG_ERROR_AND_THROW("vkCreateDevice failed with error: ", Error.what());
 		}
 
-		GraphicsQueues.resize(GraphicsNumQueues);
-		for (uint32_t Index = 0; Index < GraphicsNumQueues; Index++)
+		// Set queue handles
+		for (QueueDesc& Queue : m_Queues)
 		{
-			GraphicsQueues[Index] = vkq::Queue::create(m_LogicalDevice, GraphicsQueueFamily, Index);
-		}
-
-		if (ComputeQueueFamily != UINT32_MAX)
-		{
-			ComputeQueues.resize(ComputeNumQueues);
-			for (uint32_t Index = 0; Index < ComputeNumQueues; Index++)
-			{
-				ComputeQueues[Index] = vkq::Queue::create(m_LogicalDevice, ComputeQueueFamily, Index);
-			}
-		}
-
-		if (TransferQueueFamily != UINT32_MAX)
-		{
-			TransferQueues.resize(TransferNumQueues);
-			for (uint32_t Index = 0; Index < TransferNumQueues; Index++)
-			{
-				TransferQueues[Index] = vkq::Queue::create(m_LogicalDevice, TransferQueueFamily, Index);
-			}
+			Queue.Handle = vkq::Queue::create(m_LogicalDevice, Queue.FamilyIndex, Queue.Index);
 		}
 	}
 
@@ -204,6 +277,36 @@ namespace Qgfx
 	{
 		m_LogicalDevice.destroy();
 		m_PhysicalDevice.reset();
+	}
+
+	void RenderDeviceVk::QueueWaitIdle(uint32_t QueueIndex)
+	{
+		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
+		m_Queues[QueueIndex].Handle.waitIdle();
+	}
+
+	void RenderDeviceVk::QueueSubmit(uint32_t QueueIndex, const vk::SubmitInfo& SubmitInfo, vk::Fence Fence)
+	{
+		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
+		m_Queues[QueueIndex].Handle.submit(SubmitInfo, Fence);
+	}
+
+	void RenderDeviceVk::QueuePresent(uint32_t QueueIndex, const vk::PresentInfoKHR& PresentInfo)
+	{
+		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
+		m_Queues[QueueIndex].Handle.presentKHR(PresentInfo);
+	}
+
+	vkq::Queue RenderDeviceVk::GetVkqQueue(uint32_t QueueIndex)
+	{
+		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
+		return m_Queues[QueueIndex].Handle;
+	}
+
+	RenderContextType RenderDeviceVk::GetQueueType(uint32_t QueueIndex)
+	{
+		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
+		return m_Queues[QueueIndex].Info.Type;
 	}
 
 	void RenderDeviceVk::WaitIdle()

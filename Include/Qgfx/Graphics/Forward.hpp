@@ -3,8 +3,8 @@
 namespace Qgfx
 {
 	class IBuffer;
+	class IEngineFactory;
 	class IFence;
-	class IInstance;
 	class IObject;
 	class IRenderContext;
 	class IRenderDevice;

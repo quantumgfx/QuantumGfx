@@ -2,7 +2,7 @@
 
 #include "BaseVk.hpp"
 
-#include "../IInstance.hpp"
+#include "../IEngineFactory.hpp"
 #include "../IRenderDevice.hpp"
 
 namespace Qgfx
@@ -10,7 +10,7 @@ namespace Qgfx
 	/**
 	 * @brief Struct describing how to create a new InstanceVk.
 	*/
-	struct InstanceVkCreateInfo
+	struct EngineFactoryCreateInfoVk
 	{
 		/**
 		 * @brief Optional pointer to the function that loads all vulkan related function pointers.
@@ -28,22 +28,38 @@ namespace Qgfx
 		const uint32_t EngineVersion = VK_MAKE_VERSION(1, 0, 0);
 	};
 
+	struct DeviceQueueInfoVk
+	{
+		RenderContextType Type = RenderContextType::Universal;
+		float Priority = 0.0f;
+	};
 
-	class InstanceVk final : public IInstance
+	struct RenderDeviceCreateInfoVk : public RenderDeviceCreateInfo
+	{
+		vkq::PhysicalDevice PhysicalDeviceVk = {};
+
+		uint32_t NumRequestedQueues = 0;
+		DeviceQueueInfoVk* pRequestedQueues = nullptr;
+	};
+
+	/**
+	 * @brief A factory for Vulkan specific initialization.
+	*/
+	class EngineFactoryVk final : public IEngineFactory
 	{
 	public:
 
-		InstanceVk(RefCounter* pRefCounter, const InstanceVkCreateInfo& CreateInfo);
+		EngineFactoryVk(RefCounter* pRefCounter, const EngineFactoryCreateInfoVk& CreateInfo);
 		
-		virtual ~InstanceVk();
+		virtual ~EngineFactoryVk();
 
 		inline virtual const APIInfo& GetAPIInfo() const override { return m_APIInfo; }
 
 		inline virtual GraphicsInstanceType GetType() const override { return GraphicsInstanceType::Vulkan; }
 
-		const std::vector<vkq::PhysicalDevice> EnumeratePhysicalDevices();
+		void CreateRenderDevice(const RenderDeviceCreateInfoVk& DeviceCreateInfo, uint32_t* pNumSupportedQueues, IRenderDevice** ppDevice);
 
-		void CreateRenderDevice(const RenderDeviceCreateInfo& CreateInfo, vkq::PhysicalDevice VkPhDev, IRenderDevice** ppDevice);
+		void CreateRenderContext(IRenderDevice* pDevice, uint32_t QueueIndex, IRenderContext** ppContext);
 
 		/**
 		 * @brief Gets a handle to the vkq::Loader object from the quantumvk library, used to interface with the native Vulkan API
@@ -66,6 +82,6 @@ namespace Qgfx
 		APIInfo m_APIInfo = {};
 	};
 
-	void CreateInstanceVk(const InstanceVkCreateInfo& CreateInfo, InstanceVk** ppInstance);
+	void CreateEngineFactoryVk(const EngineFactoryCreateInfoVk& CreateInfo, EngineFactoryVk** ppEngineFactory);
 
 }

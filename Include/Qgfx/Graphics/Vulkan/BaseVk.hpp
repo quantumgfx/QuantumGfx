@@ -18,7 +18,7 @@
 #error Vulkan Headers do not include VK_KHR_swapchain extension. This is required for Qgfx.
 #endif
 
-#ifdef QGFX_PLATFORM_WIN32
+#ifdef VK_USE_PLATFORM_WIN32_KHR
 #ifndef VK_KHR_WIN32_SURFACE_EXTENSION_NAME
 #error Vulkan Headers do not include VK_KHR_win32_surface. This is required for Qgfx to create Surfaces on Win32.
 #endif

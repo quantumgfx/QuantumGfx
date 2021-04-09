@@ -1,18 +1,19 @@
-#include "Qgfx/Graphics/Vulkan/InstanceVk.hpp"
+#include "Qgfx/Graphics/Vulkan/EngineFactoryVk.hpp"
 #include "Qgfx/Graphics/Vulkan/RenderDeviceVk.hpp"
+#include "Qgfx/Graphics/Vulkan/RenderContextVk.hpp"
 #include "Qgfx/Common/Error.hpp"
 
 #include <vector>
 
 namespace Qgfx
 {
-	void CreateInstanceVk(const InstanceVkCreateInfo& CreateInfo, InstanceVk** ppInstance)
+	void CreateEngineFactoryVk(const EngineFactoryCreateInfoVk& CreateInfo, EngineFactoryVk** ppEngineFactory)
 	{
-		*ppInstance = MakeRefCountedObj<InstanceVk>()(CreateInfo);
+		*ppEngineFactory = MakeRefCountedObj<EngineFactoryVk>()(CreateInfo);
 	}
 
-	InstanceVk::InstanceVk(RefCounter* pRefCounter, const InstanceVkCreateInfo& CreateInfo)
-		: IInstance(pRefCounter)
+	EngineFactoryVk::EngineFactoryVk(RefCounter* pRefCounter, const EngineFactoryCreateInfoVk& CreateInfo)
+		: IEngineFactory(pRefCounter)
 	{
 		m_Loader = vkq::Loader::create(CreateInfo.pfnLoaderHandle);
 
@@ -62,16 +63,24 @@ namespace Qgfx
 		}
 	}
 	
-	InstanceVk::~InstanceVk()
+	EngineFactoryVk::~EngineFactoryVk()
 	{
 		m_Instance.destroy();
 		m_Loader.destroy();
 	}
 
-	void InstanceVk::CreateRenderDevice(const RenderDeviceCreateInfo& CreateInfo, vkq::PhysicalDevice VkPhDev, IRenderDevice** ppDevice)
+	void EngineFactoryVk::CreateRenderDevice(const RenderDeviceCreateInfoVk& DeviceCreateInfo, uint32_t* pNumSupportedQueues, IRenderDevice** ppDevice)
 	{
-		RenderDeviceVk* pRenderDevice = MakeRefCountedObj<RenderDeviceVk>()(this, CreateInfo, VkPhDev);
+		RenderDeviceVk* pRenderDevice = MakeRefCountedObj<RenderDeviceVk>()(this, DeviceCreateInfo);
+		if(pNumSupportedQueues)
+			*pNumSupportedQueues = pRenderDevice->GetNumSupportedQueues();
 		*ppDevice = pRenderDevice;
+	}
+
+	void EngineFactoryVk::CreateRenderContext(IRenderDevice* pDevice, uint32_t QueueIndex, IRenderContext** ppContext)
+	{
+		RenderContextVk* pRenderContext = MakeRefCountedObj<RenderContextVk>()(pDevice, QueueIndex);
+		*ppContext = pRenderContext;
 	}
 
 }
