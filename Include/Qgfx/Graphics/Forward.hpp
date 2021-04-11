@@ -6,7 +6,6 @@ namespace Qgfx
 	class IEngineFactory;
 	class IFence;
 	class IObject;
-	class IRenderContext;
 	class IRenderDevice;
 	class ISampler;
 	class ISwapChain;

@@ -18,35 +18,67 @@ namespace Qgfx
 
 		~SwapChainVk();
 
+		virtual uint32_t GetWidth() override { return m_Width; }
+		virtual uint32_t GetHeight() override { return m_Height; }
+
+		virtual uint32_t GetBufferCount() override { return m_BufferCount; }
+
+		virtual SurfaceTransform GetSurfaceTransform() override { return m_PreTransform; }
+
 	private:
 
 		void CreateSurface();
 		void CreateSwapChain();
 
+		void AcquireNextImage();
+
 	private:
 
-		uint32_t m_DesiredBufferCount;
-		SurfaceTransform m_DesiredPreTransform;
-		SwapChainUsageFlags m_Usage;
-
-		uint32_t m_Width;
-		uint32_t m_Height;
-
-		uint32_t m_BufferCount;
-
-		SurfaceTransform m_PreTransform;
-
-		TextureFormat m_ColorBufferFormat;
-
+		////////////////////////////////
+		// Handles /////////////////////
+		////////////////////////////////
+		
 		RefAutoPtr<RenderDeviceVk> m_spRenderDevice;
 
 		NativeWindow m_Window;
+
+		////////////////////////////////
+		// Settings ////////////////////
+		////////////////////////////////
+
+		TextureFormat       m_ColorBufferFormat;
+		TextureFormat       m_DepthBufferFormat;
+		SurfaceTransform    m_DesiredPreTransform;
+		uint32_t            m_DesiredBufferCount;
+		SwapChainUsageFlags m_Usage;
+		
+		/////////////////////////////////
+		// Current state ////////////////
+		/////////////////////////////////
+
+		uint32_t m_Width;
+		uint32_t m_Height;
+		uint32_t m_BufferCount = 0;
+		bool     m_bIsMinimized = false;
+		bool     m_bVSyncEnabled = true;
+
+		SurfaceTransform m_PreTransform;
+
+		///////////////////////////////////
+		// Vulkan Objects /////////////////
+		///////////////////////////////////
+		
 		vk::SurfaceKHR m_VkSurface;
 		vk::SwapchainKHR m_VkSwapChain;
 
+		std::vector<vk::Semaphore> m_ImageAcquiredSemaphores;
+		std::vector<vk::Fence>     m_ImageAcquiredFences;
+
+		std::vector<vk::Semaphore> m_DrawCompleteSemaphores;
+
 		vk::Format m_VkColorFormat;
 
-#if 1
+#if 0 // For Andriod
 		// Surface extent corresponding to identity transform. We have to store this value,
 		// because on Android vkGetPhysicalDeviceSurfaceCapabilitiesKHR is not reliable and
 		// starts reporting incorrect dimensions after few rotations.
@@ -55,13 +87,6 @@ namespace Qgfx
 		// Keep track of current surface transform to detect orientation changes.
 		vk::SurfaceTransformFlagBitsKHR m_CurrentSurfaceTransform = {};
 #endif
-		bool     m_bIsMinimized = false;
-		bool     m_bVSyncEnabled = true;
-
-		std::vector<vk::Semaphore> m_ImageAcquiredSemaphores;
-		std::vector<vk::Fence>     m_ImageAcquiredFences;
-
-		std::vector<vk::Semaphore> m_DrawCompleteSemaphores;
 
 	};
 }

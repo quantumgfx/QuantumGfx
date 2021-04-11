@@ -32,7 +32,7 @@ namespace Qgfx
 		void QueuePresent(uint32_t QueueIndex, const vk::PresentInfoKHR& PresentInfo);
 
 		vkq::Queue GetVkqQueue(uint32_t QueueIndex);
-		RenderContextType GetQueueType(uint32_t QueueIndex);
+		CommandQueueType GetQueueType(uint32_t QueueIndex);
 
 		vkq::PhysicalDevice GetVkqPhysicalDevice() { return m_PhysicalDevice; }
 		vkq::Device GetVkqDevice() { return m_LogicalDevice; }

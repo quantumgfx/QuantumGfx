@@ -1,6 +1,6 @@
 #include "Qgfx/Graphics/Vulkan/EngineFactoryVk.hpp"
 #include "Qgfx/Graphics/Vulkan/RenderDeviceVk.hpp"
-#include "Qgfx/Graphics/Vulkan/RenderContextVk.hpp"
+#include "Qgfx/Graphics/Vulkan/CommandQueueVk.hpp"
 #include "Qgfx/Common/Error.hpp"
 
 #include <vector>
@@ -77,10 +77,10 @@ namespace Qgfx
 		*ppDevice = pRenderDevice;
 	}
 
-	void EngineFactoryVk::CreateRenderContext(IRenderDevice* pDevice, uint32_t QueueIndex, IRenderContext** ppContext)
+	void EngineFactoryVk::CreateCommandQueue(IRenderDevice* pDevice, uint32_t QueueIndex, ICommandQueue** ppQueue)
 	{
-		RenderContextVk* pRenderContext = MakeRefCountedObj<RenderContextVk>()(pDevice, QueueIndex);
-		*ppContext = pRenderContext;
+		CommandQueueVk* pCommandQueue = MakeRefCountedObj<CommandQueueVk>()(pDevice, QueueIndex);
+		*ppQueue = pCommandQueue;
 	}
 
 }

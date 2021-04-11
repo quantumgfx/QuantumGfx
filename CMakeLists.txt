@@ -88,10 +88,10 @@ set(QGFX_INCLUDE_FILES
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Forward.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/GraphicsTypes.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IBuffer.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ICommandQueue.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IEngineFactory.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IFence.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IObject.hpp
-        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IRenderContext.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IRenderDevice.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ISampler.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ISwapChain.hpp
@@ -127,15 +127,15 @@ if(${QGFX_VULKAN_SUPPORTED})
 
     set(QGFX_INCLUDE_FILES ${QGFX_INCLUDE_FILES}
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/BaseVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/CommandQueueVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/EngineFactoryVk.hpp
-                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/RenderContextVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/RenderDeviceVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/SwapChainVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/TypeConversionsVk.hpp)
 
     set(QGFX_SOURCE_FILES ${QGFX_SOURCE_FILES} 
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/CommandQueueVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/EngineFactoryVk.cpp
-                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/RenderContextVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/RenderDeviceVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/SwapChainVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/TypeConversionsVk.cpp)

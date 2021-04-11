@@ -142,7 +142,7 @@ namespace Qgfx
 			// Finds best queue //
 			//////////////////////
 
-			if (QueueFamily == UINT32_MAX && QueueInfo.Type == RenderContextType::AsyncTransfer)
+			if (QueueFamily == UINT32_MAX && QueueInfo.QueueType == CommandQueueType::AsyncTransfer)
 			{
 				for (uint32_t QueueFamilyIndex : TransferQueueFamilies)
 				{
@@ -155,8 +155,8 @@ namespace Qgfx
 				}
 			}
 
-			if (QueueFamily == UINT32_MAX && (QueueInfo.Type == RenderContextType::AsyncTransfer ||
-											 QueueInfo.Type == RenderContextType::AsyncCompute))
+			if (QueueFamily == UINT32_MAX && (QueueInfo.QueueType == CommandQueueType::AsyncTransfer ||
+											 QueueInfo.QueueType == CommandQueueType::AsyncCompute))
 			{
 				for (uint32_t QueueFamilyIndex : ComputeQueueFamilies)
 				{
@@ -169,9 +169,9 @@ namespace Qgfx
 				}
 			}
 
-			if (QueueFamily == UINT32_MAX && (QueueInfo.Type == RenderContextType::AsyncTransfer ||
-											 QueueInfo.Type == RenderContextType::AsyncCompute || 
-											 QueueInfo.Type == RenderContextType::Universal))
+			if (QueueFamily == UINT32_MAX && (QueueInfo.QueueType == CommandQueueType::AsyncTransfer ||
+											 QueueInfo.QueueType == CommandQueueType::AsyncCompute ||
+											 QueueInfo.QueueType == CommandQueueType::Universal))
 			{
 				for (uint32_t QueueFamilyIndex : UniversalQueueFamilies)
 				{
@@ -303,10 +303,10 @@ namespace Qgfx
 		return m_Queues[QueueIndex].Handle;
 	}
 
-	RenderContextType RenderDeviceVk::GetQueueType(uint32_t QueueIndex)
+	CommandQueueType RenderDeviceVk::GetQueueType(uint32_t QueueIndex)
 	{
 		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
-		return m_Queues[QueueIndex].Info.Type;
+		return m_Queues[QueueIndex].Info.QueueType;
 	}
 
 	void RenderDeviceVk::WaitIdle()

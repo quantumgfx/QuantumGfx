@@ -7,16 +7,39 @@ namespace Qgfx
 	SwapChainVk::SwapChainVk(RefCounter* pRefCounter, const SwapChainCreateInfo& CreateInfo, const NativeWindow& Window, RenderContextVk* pRenderContext, RenderDeviceVk* pRenderDevice)
 		: ISwapChain(pRefCounter)
 	{
-		m_spRenderDevice = pRenderDevice;
+        m_spRenderDevice = pRenderDevice;
+        m_Window = Window;
+
+        m_ColorBufferFormat = CreateInfo.ColorBufferFormat;
+        m_DepthBufferFormat = CreateInfo.DepthBufferFormat;
+        m_DesiredBufferCount = CreateInfo.BufferCount;
+        m_DesiredPreTransform = CreateInfo.PreTransform;
+        m_Usage = CreateInfo.Usage;
+
+        m_Width = CreateInfo.Width;
+        m_Height = CreateInfo.Height;
+
+        CreateSurface();
+        CreateSwapChain();
 	}
 
 	SwapChainVk::~SwapChainVk()
 	{
-
+        if (m_VkSurface)
+        {
+            m_spRenderDevice->GetVkqInstance().destroySurfaceKHR(m_VkSurface);
+            m_VkSurface = nullptr;
+        }
 	}
 
 	void SwapChainVk::CreateSurface()
 	{
+        if (m_VkSurface)
+        {
+            m_spRenderDevice->GetVkqInstance().destroySurfaceKHR(m_VkSurface);
+            m_VkSurface = nullptr;
+        }
+
 		try
 		{
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
@@ -179,7 +202,7 @@ namespace Qgfx
             SwapchainExtent = SurfCapabilities.currentExtent;
         }
 
-#if 1 // For Andriod
+#if 0 // For Andriod
         // On Android, vkGetPhysicalDeviceSurfaceCapabilitiesKHR is not reliable and starts reporting incorrect
         // dimensions after few rotations. To alleviate the problem, we store the surface extent corresponding to
         // identity rotation.
@@ -381,4 +404,8 @@ namespace Qgfx
             m_ImageAcquiredFences[i] = Dev.createFence(FenceCI);
         }
 	}
+
+    void SwapChainVk::AcquireNextImage()
+    {
+    }
 }

@@ -35,6 +35,19 @@ namespace Qgfx
 
     using CPUAccessFlags = Flags<CPUAccessFlagBits>;
 
+    enum class BufferMemoryType
+    {
+        /**
+         * @brief A resource that can only be read by the GPU. It cannot be written by the GPU, and can not be accessed at all by the CPU. \n
+         * Static buffers do not allow CPU access and must use CPUAccess::None.
+        */
+        Immutable = 0,
+        Default,
+        Dynamic,
+        Staging,
+        Unified,
+    };
+
     enum class BufferState
     {
         Vertex = 0,
@@ -66,8 +79,7 @@ namespace Qgfx
 
     using BufferUsageFlags = Flags<BufferUsageFlagBits>;
 
-
-    enum class BufferMemoryType
+    enum class ImageMemoryType
     {
         /**
          * @brief A resource that can only be read by the GPU. It cannot be written by the GPU, and can not be accessed at all by the CPU. \n
@@ -234,7 +246,7 @@ namespace Qgfx
         Border,
     };
 
-    enum class RenderContextType
+    enum class CommandQueueType
     {
         Universal = 0,
         AsyncCompute,

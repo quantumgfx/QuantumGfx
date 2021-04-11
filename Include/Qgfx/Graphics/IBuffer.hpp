@@ -4,7 +4,7 @@
 
 namespace Qgfx
 {
-	struct BufferDesc
+	struct BufferCreateInfo
 	{
 		uint32_t SizeInBytes = 0;
 
@@ -19,7 +19,6 @@ namespace Qgfx
 	{
 	public:
 
-		virtual const BufferDesc& GetDesc() const = 0;
 		virtual uint32_t GetSizeInByte() const = 0;
 		virtual BufferUsageFlags GetUsage() const = 0;
 		virtual BufferMemoryType GetMemoryType() const = 0;

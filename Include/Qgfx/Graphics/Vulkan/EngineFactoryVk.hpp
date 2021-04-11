@@ -28,12 +28,18 @@ namespace Qgfx
 		const uint32_t EngineVersion = VK_MAKE_VERSION(1, 0, 0);
 	};
 
+	/**
+	 * @brief Info used to create hardware-level queue.
+	*/
 	struct DeviceQueueInfoVk
 	{
-		RenderContextType Type = RenderContextType::Universal;
+		CommandQueueType QueueType = CommandQueueType::Universal;
 		float Priority = 0.0f;
 	};
 
+	/**
+	 * @brief Vulkan backend specific settings used to create render device.
+	*/
 	struct RenderDeviceCreateInfoVk : public RenderDeviceCreateInfo
 	{
 		vkq::PhysicalDevice PhysicalDeviceVk = {};
@@ -59,7 +65,7 @@ namespace Qgfx
 
 		void CreateRenderDevice(const RenderDeviceCreateInfoVk& DeviceCreateInfo, uint32_t* pNumSupportedQueues, IRenderDevice** ppDevice);
 
-		void CreateRenderContext(IRenderDevice* pDevice, uint32_t QueueIndex, IRenderContext** ppContext);
+		void CreateCommandQueue(IRenderDevice* pDevice, uint32_t QueueIndex, ICommandQueue** ppContext);
 
 		/**
 		 * @brief Gets a handle to the vkq::Loader object from the quantumvk library, used to interface with the native Vulkan API

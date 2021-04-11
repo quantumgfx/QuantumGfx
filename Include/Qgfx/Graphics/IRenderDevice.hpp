@@ -3,7 +3,8 @@
 #include "IObject.hpp"
 
 #include "GraphicsTypes.hpp"
-#include "IRenderContext.hpp"
+#include "ICommandQueue.hpp"
+#include "IFence.hpp"
 #include "ISwapChain.hpp"
 
 #include "../Platform/NativeWindow.hpp"
@@ -23,6 +24,8 @@ namespace Qgfx
 		virtual ~IRenderDevice() = default;
 
 		virtual void WaitIdle() = 0;
+
+		virtual void CreateFence(uint64_t InitialValue, IFence** ppFence) = 0;
 
 		virtual const DeviceFeatures& GetFeatures() const = 0;
 
