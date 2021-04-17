@@ -42,7 +42,7 @@ namespace Qgfx
 	*/
 	struct RenderDeviceCreateInfoVk : public RenderDeviceCreateInfo
 	{
-		vkq::PhysicalDevice PhysicalDeviceVk = {};
+		vk::PhysicalDevice PhysicalDeviceVk = {};
 
 		uint32_t NumRequestedQueues = 0;
 		DeviceQueueInfoVk* pRequestedQueues = nullptr;
@@ -68,22 +68,18 @@ namespace Qgfx
 		void CreateCommandQueue(IRenderDevice* pDevice, uint32_t QueueIndex, ICommandQueue** ppContext);
 
 		/**
-		 * @brief Gets a handle to the vkq::Loader object from the quantumvk library, used to interface with the native Vulkan API
-		 * @return A handle to the internal vkq::Loader object
-		*/
-		inline vkq::Loader GetVkqLoader() { return m_Loader; }
-
-		/**
 		 * @brief Gets a handle to the vkq::Instance object from the quantumvk library, used to interface with the native Vulkan API
 		 * @return A handle to the internal vkq::Instance object
 		*/
-		inline vkq::Instance GetVkqInstance() { return m_Instance; }
+		inline vk::Instance GetVkInstance() const { return m_VkInstance; }
+
+		inline const vk::DispatchLoaderDynamic& GetVkDispatch() const { return m_VkDispatch; }
 
 		 
 	private:
 
-		vkq::Loader m_Loader;
-		vkq::Instance m_Instance;
+		vk::DispatchLoaderDynamic m_VkDispatch;
+		vk::Instance m_VkInstance;
 
 		APIInfo m_APIInfo = {};
 	};

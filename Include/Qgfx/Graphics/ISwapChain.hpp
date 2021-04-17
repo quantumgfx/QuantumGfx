@@ -2,6 +2,7 @@
 
 #include "GraphicsTypes.hpp"
 #include "IObject.hpp"
+#include "ICommandQueue.hpp"
 
 namespace Qgfx
 {
@@ -33,6 +34,11 @@ namespace Qgfx
         SurfaceTransform PreTransform = SurfaceTransform::Optimal;
         
         SwapChainUsageFlags Usage = SwapChainUsageFlagBits::RenderTarget;
+
+        /**
+         * @brief Pointer to queue which will own the swapchain. Must be have type CommandQueueType::General.
+        */
+        ICommandQueue* pQueue = nullptr;
     };
 
 	class ISwapChain : public IObject
@@ -73,5 +79,11 @@ namespace Qgfx
         // virtual TextureFormat GetColorBufferFormat() = 0;
 
 		virtual void Resize(uint32_t NewWidth, uint32_t NewHeight, SurfaceTransform NewPreTransform = SurfaceTransform::Optimal) = 0;
+
+        virtual void Acquire() = 0;
+
+        // virtual void GetCurrentPresentableImage();
+
+        virtual void Present() = 0;
 	};
 }

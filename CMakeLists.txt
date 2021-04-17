@@ -75,6 +75,7 @@ set(QGFX_INCLUDE_FILES
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/FlagsEnum.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/FormatString.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/MemoryAllocator.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/PoolAllocator.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/SpinLock.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/RefAutoPtr.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/RefCountedObject.hpp
@@ -88,6 +89,7 @@ set(QGFX_INCLUDE_FILES
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Forward.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/GraphicsTypes.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IBuffer.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ICommandBuffer.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ICommandQueue.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IEngineFactory.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IFence.hpp
@@ -121,21 +123,24 @@ endif()
 
 if(${QGFX_VULKAN_SUPPORTED})
 
-    add_subdirectory(Extern/quantumvk)
-
-    target_link_libraries(Qgfx PUBLIC quantumvk)
+    find_package(Vulkan REQUIRED)
+    target_include_directories(Qgfx PUBLIC ${Vulkan_INCLUDE_DIR})
 
     set(QGFX_INCLUDE_FILES ${QGFX_INCLUDE_FILES}
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/BaseVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/CommandBufferVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/CommandQueueVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/EngineFactoryVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/FenceVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/RenderDeviceVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/SwapChainVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/TypeConversionsVk.hpp)
 
     set(QGFX_SOURCE_FILES ${QGFX_SOURCE_FILES} 
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/CommandBufferVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/CommandQueueVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/EngineFactoryVk.cpp
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/FenceVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/RenderDeviceVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/SwapChainVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/TypeConversionsVk.cpp)

@@ -37,7 +37,7 @@ int main()
 ```
 
 Vulkan also has some extra options when creating render devices. First, you can 
-specify which GPU (vk::PhysicalDevice in Vulkan terminology) to use. Also, Vulkan supports multiple seperate `IRenderDevice`s running in parallel. Finally, it also 
+specify which GPU (vk::PhysicalDevice in Vulkan terminology) to use. Also, Vulkan supports multiple separate `IRenderDevice`s running in parallel. Finally, it also 
 allows you to specify exactly which hardware queues to use when creating a render 
 context (DirectX 12 and Metal abstract this decision), potentially resulting in 
 higher performance.

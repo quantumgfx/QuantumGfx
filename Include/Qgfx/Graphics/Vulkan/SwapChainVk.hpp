@@ -6,7 +6,7 @@
 
 #include "BaseVk.hpp"
 #include "RenderDeviceVk.hpp"
-#include "RenderContextVk.hpp"
+#include "CommandQueueVk.hpp"
 
 namespace Qgfx
 {
@@ -14,7 +14,7 @@ namespace Qgfx
 	{
 	public:
 
-		SwapChainVk(RefCounter* pRefCounter, const SwapChainCreateInfo& CreateInfo, const NativeWindow& Window, RenderContextVk* pRenderContext, RenderDeviceVk* pRenderDevice);
+		SwapChainVk(RefCounter* pRefCounter, const SwapChainCreateInfo& CreateInfo, const NativeWindow& Window, RenderDeviceVk* pRenderDevice);
 
 		~SwapChainVk();
 
@@ -25,20 +25,30 @@ namespace Qgfx
 
 		virtual SurfaceTransform GetSurfaceTransform() override { return m_PreTransform; }
 
+		virtual void Acquire() override;
+
+		virtual void Present() override;
+
 	private:
 
 		void CreateSurface();
 		void CreateSwapChain();
 
-		void AcquireNextImage();
+		void RecreateSwapChain();
+
+		void ReleaseSwapChainResources();
 
 	private:
+
+		friend class CommandQueueVk;
 
 		////////////////////////////////
 		// Handles /////////////////////
 		////////////////////////////////
 		
 		RefAutoPtr<RenderDeviceVk> m_spRenderDevice;
+
+		RefAutoPtr<CommandQueueVk> m_spCommandQueue;
 
 		NativeWindow m_Window;
 
@@ -69,12 +79,16 @@ namespace Qgfx
 		///////////////////////////////////
 		
 		vk::SurfaceKHR m_VkSurface;
-		vk::SwapchainKHR m_VkSwapChain;
+		vk::SwapchainKHR m_VkSwapchain;
 
+		uint32_t m_SemaphoreIndex;
+
+		std::vector<bool> m_bImageAcquired;
+		std::vector<vk::Fence> m_ImageAcquiredFences;
 		std::vector<vk::Semaphore> m_ImageAcquiredSemaphores;
-		std::vector<vk::Fence>     m_ImageAcquiredFences;
+		std::vector<vk::Semaphore> m_SubmitCompleteSemaphores;
 
-		std::vector<vk::Semaphore> m_DrawCompleteSemaphores;
+		uint32_t m_BackBufferIndex;
 
 		vk::Format m_VkColorFormat;
 

@@ -248,9 +248,18 @@ namespace Qgfx
 
     enum class CommandQueueType
     {
-        Universal = 0,
-        AsyncCompute,
-        AsyncTransfer,
+        /**
+         * @brief General queues support presentation, graphics commands, compute commands, and transfer commands.
+        */
+        General = 0,
+        /**
+         * @brief Compute queues support compute commands and transfer commands
+        */
+        Compute,
+        /**
+         * @brief Transfer queues only support transfer commands
+        */
+        Transfer,
     };
 
     /////////////////////////

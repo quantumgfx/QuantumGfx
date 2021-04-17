@@ -2,15 +2,22 @@
 
 #include <cstdint>
 
+#include "IObject.hpp"
+
 namespace Qgfx
 {
-	class IFence
+	class IFence : public IObject
 	{
 	public:
 
+		IFence(RefCounter* pRefCounter)
+			: IObject(pRefCounter)
+		{
+		}
+
 		virtual uint64_t GetCompletedValue() = 0;
 
-		virtual uint64_t GetPendingValue() = 0;
+		// virtual uint64_t GetPendingValue() = 0;
 
 		/**
 		 * @brief Signals fence from host (vs from GPU as on ICommandQueue::SignalFence())

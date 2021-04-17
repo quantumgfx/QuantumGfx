@@ -18,38 +18,42 @@ namespace Qgfx
 	{
 	public:
 
+		RenderDeviceVk(RefCounter* pRefCounter, EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo);
+
+		~RenderDeviceVk();
+
 		virtual void WaitIdle() override;
 
-		inline virtual const DeviceFeatures& GetFeatures() const override
-		{
-			return m_DeviceFeatures;
-		}
+		virtual void CreateFence(uint64_t InitialValue, IFence** ppFence) override;
+
+		inline virtual const DeviceFeatures& GetFeatures() const override { return m_DeviceFeatures; }
 
 		inline uint32_t GetNumSupportedQueues() { return m_NumSupportedQueues; }
 
 		void QueueWaitIdle(uint32_t QueueIndex);
 		void QueueSubmit(uint32_t QueueIndex, const vk::SubmitInfo& SubmitInfo, vk::Fence Fence);
 		void QueuePresent(uint32_t QueueIndex, const vk::PresentInfoKHR& PresentInfo);
+		uint32_t GetQueueFamilyIndex(uint32_t QueueIndex);
 
-		vkq::Queue GetVkqQueue(uint32_t QueueIndex);
+		vk::Queue GetVkQueue(uint32_t QueueIndex);
+
 		CommandQueueType GetQueueType(uint32_t QueueIndex);
 
-		vkq::PhysicalDevice GetVkqPhysicalDevice() { return m_PhysicalDevice; }
-		vkq::Device GetVkqDevice() { return m_LogicalDevice; }
-		vkq::Instance GetVkqInstance() { return m_spEngineFactory->GetVkqInstance(); }
+		inline vk::Device GetVkDevice() const { return m_VkDevice; }
 
-	private:
+		inline vk::Instance GetVkInstance() const { return m_spEngineFactory->GetVkInstance(); }
 
-		RenderDeviceVk(RefCounter* pRefCounter, EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo);
+		inline vk::PhysicalDevice GetVkPhysicalDevice() const { return m_VkPhysicalDevice; }
 
-		~RenderDeviceVk();
+		inline const vk::DispatchLoaderDynamic& GetVkDispatch() const { return m_VkDispatch; }
 
 	private:
 
 		RefAutoPtr<EngineFactoryVk> m_spEngineFactory;
 
-		vkq::PhysicalDevice m_PhysicalDevice;
-		vkq::Device m_LogicalDevice;
+		vk::DispatchLoaderDynamic m_VkDispatch;
+		vk::PhysicalDevice m_VkPhysicalDevice;
+		vk::Device m_VkDevice;
 
 		DeviceFeatures m_DeviceFeatures;
 
@@ -60,9 +64,11 @@ namespace Qgfx
 			uint32_t FamilyIndex;
 			uint32_t Index;
 			DeviceQueueInfoVk Info;
-			vkq::Queue Handle;
+			vk::Queue Handle;
 		};
 
 		std::vector<QueueDesc> m_Queues;
+
+		bool m_bTimelineSemaphoresSupported = false;
 	};
 }

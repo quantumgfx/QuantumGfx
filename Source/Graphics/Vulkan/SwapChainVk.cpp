@@ -1,13 +1,18 @@
 #include "Qgfx/Graphics/Vulkan/SwapChainVk.hpp"
+#include "Qgfx/Graphics/Vulkan/CommandQueueVk.hpp"
 #include "Qgfx/Graphics/Vulkan/TypeConversionsVk.hpp"
 #include "Qgfx/Common/Error.hpp"
+#include "Qgfx/Common/ValidatedCast.hpp"
 
 namespace Qgfx
 {
-	SwapChainVk::SwapChainVk(RefCounter* pRefCounter, const SwapChainCreateInfo& CreateInfo, const NativeWindow& Window, RenderContextVk* pRenderContext, RenderDeviceVk* pRenderDevice)
+	SwapChainVk::SwapChainVk(RefCounter* pRefCounter, const SwapChainCreateInfo& CreateInfo, const NativeWindow& Window, RenderDeviceVk* pRenderDevice)
 		: ISwapChain(pRefCounter)
 	{
+        QGFX_VERIFY_EXPR(CreateInfo.pQueue);
+
         m_spRenderDevice = pRenderDevice;
+        m_spCommandQueue = ValidatedCast<CommandQueueVk>(CreateInfo.pQueue);
         m_Window = Window;
 
         m_ColorBufferFormat = CreateInfo.ColorBufferFormat;
@@ -27,16 +32,94 @@ namespace Qgfx
 	{
         if (m_VkSurface)
         {
-            m_spRenderDevice->GetVkqInstance().destroySurfaceKHR(m_VkSurface);
+            m_spRenderDevice->GetVkInstance().destroySurfaceKHR(m_VkSurface);
             m_VkSurface = nullptr;
         }
 	}
 
-	void SwapChainVk::CreateSurface()
+    void SwapChainVk::Acquire()
+    {
+        vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
+        const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
+
+        // Applications should not rely on vkAcquireNextImageKHR blocking in order to
+        // meter their rendering speed. The implementation may return from this function
+        // immediately regardless of how many presentation requests are queued, and regardless
+        // of when queued presentation requests will complete relative to the call. Instead,
+        // applications can use fence to meter their frame generation work to match the
+        // presentation rate.
+
+        // Explicitly make sure that there are no more pending frames in the command queue
+        // than the number of the swap chain images.
+        //
+        // Nsc = 3 - number of the swap chain images
+        //
+        //   N-Ns          N-2           N-1            N (Current frame)
+        //    |             |             |             |
+        //                  |
+        //          Wait for this fence
+        //
+        // When acquiring swap chain image for frame N, we need to make sure that
+        // frame N-Nsc has completed. To achieve that, we wait for the image acquire
+        // fence for frame N-Nsc-1. Thus we will have no more than Nsc frames in the queue.
+
+        m_SemaphoreIndex = (m_SemaphoreIndex + 1) % m_BufferCount;
+
+        uint32_t m_OldestSemaphoreIndex = (m_SemaphoreIndex + 1) % m_BufferCount;
+
+        if (m_bImageAcquired[m_OldestSemaphoreIndex])
+        {
+            vk::Result Res = VkDevice.getFenceStatus(m_ImageAcquiredFences[m_OldestSemaphoreIndex], VkDispatch);
+            if (Res == vk::Result::eErrorDeviceLost)
+                QGFX_LOG_ERROR_AND_THROW("Unexpected device loss.");
+
+            if (Res == vk::Result::eNotReady)
+                VkDevice.waitForFences(m_ImageAcquiredFences[m_OldestSemaphoreIndex], true, UINT64_MAX, VkDispatch);
+
+            VkDevice.resetFences(m_ImageAcquiredFences[m_OldestSemaphoreIndex], VkDispatch);
+
+            m_bImageAcquired[m_OldestSemaphoreIndex] = false;
+        }
+
+        vk::Result Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, m_ImageAcquiredSemaphores[m_SemaphoreIndex], m_ImageAcquiredFences[m_SemaphoreIndex], &m_BackBufferIndex, VkDispatch);
+
+        if (Res == vk::Result::eSuboptimalKHR || Res == vk::Result::eErrorOutOfDateKHR)
+        {
+            RecreateSwapChain();
+
+            m_SemaphoreIndex = 0; // To start with 0 index when acquire next image
+
+            vk::Result Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, m_ImageAcquiredSemaphores[m_SemaphoreIndex], m_ImageAcquiredFences[m_SemaphoreIndex], &m_BackBufferIndex, VkDispatch);
+
+            Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, m_ImageAcquiredSemaphores[m_SemaphoreIndex], m_ImageAcquiredFences[m_SemaphoreIndex], &m_BackBufferIndex, VkDispatch);
+        }
+        QGFX_VERIFY(Res == vk::Result::eSuccess, "Failed to acquire next swap chain image");
+
+        m_bImageAcquired[m_SemaphoreIndex] = (Res == vk::Result::eSuccess);
+
+        m_spCommandQueue->AddWaitSemaphore(m_ImageAcquiredSemaphores[m_SemaphoreIndex]);
+    }
+
+    void SwapChainVk::Present()
+    {
+        m_spCommandQueue->AddSignalSemaphore(m_SubmitCompleteSemaphores[m_SemaphoreIndex]);
+        m_spCommandQueue->SubmitCommandBuffers(0, nullptr);
+
+        vk::PresentInfoKHR PresentInfo{};
+        PresentInfo.pNext = nullptr;
+        PresentInfo.waitSemaphoreCount = 1;
+        PresentInfo.pWaitSemaphores = &m_SubmitCompleteSemaphores[m_SemaphoreIndex];
+        PresentInfo.swapchainCount = 1;
+        PresentInfo.pSwapchains = &m_VkSwapchain;
+        PresentInfo.pImageIndices = &m_BackBufferIndex;
+        PresentInfo.pResults = nullptr;
+    }
+
+    void SwapChainVk::CreateSurface()
 	{
         if (m_VkSurface)
         {
-            m_spRenderDevice->GetVkqInstance().destroySurfaceKHR(m_VkSurface);
+            m_spRenderDevice->GetVkInstance().destroySurfaceKHR(m_VkSurface, nullptr, m_spRenderDevice->GetVkDispatch());
             m_VkSurface = nullptr;
         }
 
@@ -50,7 +133,7 @@ namespace Qgfx
 				SurfaceCreateInfo.hinstance = GetModuleHandle(NULL);
 				SurfaceCreateInfo.hwnd = (HWND)m_Window.hWnd;
 
-				m_VkSurface = m_spRenderDevice->GetVkqInstance().createWin32SurfaceKHR(SurfaceCreateInfo);
+				m_VkSurface = m_spRenderDevice->GetVkInstance().createWin32SurfaceKHR(SurfaceCreateInfo, nullptr, m_spRenderDevice->GetVkDispatch());
 			}
 #endif
 		}
@@ -63,14 +146,15 @@ namespace Qgfx
 	void SwapChainVk::CreateSwapChain()
 	{
 
-		vkq::Device Dev = m_spRenderDevice->GetVkqDevice();
-		vkq::PhysicalDevice PhDev = m_spRenderDevice->GetVkqPhysicalDevice();
+		vk::Device Dev = m_spRenderDevice->GetVkDevice();
+		vk::PhysicalDevice PhDev = m_spRenderDevice->GetVkPhysicalDevice();
+        const vk::DispatchLoaderDynamic& Dispatch = m_spRenderDevice->GetVkDispatch();
 		
 		std::vector<vk::SurfaceFormatKHR> SupportedFormats{};
 
 		try
 		{
-			SupportedFormats = PhDev.getSurfaceFormatsKHR(m_VkSurface);
+			SupportedFormats = PhDev.getSurfaceFormatsKHR(m_VkSurface, Dispatch);
 		}
 		catch (const vk::SystemError& Error)
 		{
@@ -151,7 +235,7 @@ namespace Qgfx
 
         try
         {
-            PresentModes = PhDev.getSurfacePresentModes(m_VkSurface);
+            PresentModes = PhDev.getSurfacePresentModesKHR(m_VkSurface, Dispatch);
         }
         catch (const vk::SystemError& Error)
         {
@@ -305,8 +389,8 @@ namespace Qgfx
             }
         }
 
-        vk::SwapchainKHR OldSwapchain = m_VkSwapChain;
-        m_VkSwapChain = nullptr;
+        vk::SwapchainKHR OldSwapchain = m_VkSwapchain;
+        m_VkSwapchain = nullptr;
 
         vk::SwapchainCreateInfoKHR SwapChainCI = {};
 
@@ -321,7 +405,7 @@ namespace Qgfx
         SwapChainCI.imageArrayLayers = 1;
         SwapChainCI.presentMode = PresentMode;
         SwapChainCI.oldSwapchain = OldSwapchain;
-        SwapChainCI.clipped = VK_TRUE;
+        SwapChainCI.clipped = true;
         SwapChainCI.imageColorSpace = ColorSpace;
 
         //DEV_CHECK_ERR(m_SwapChainDesc.Usage != 0, "No swap chain usage flags defined");
@@ -353,7 +437,7 @@ namespace Qgfx
 
         try
         {
-            m_VkSwapChain = Dev.createSwapchainKHR(SwapChainCI);
+            m_VkSwapchain = Dev.createSwapchainKHR(SwapChainCI, nullptr, Dispatch);
         }
         catch (const vk::SystemError& Error)
         {
@@ -362,13 +446,12 @@ namespace Qgfx
 
         if (OldSwapchain)
         {
-            Dev.destroySwapchainKHR(OldSwapchain);
-            OldSwapchain = nullptr;
+            Dev.destroySwapchainKHR(OldSwapchain, nullptr, Dispatch);
         }
 
         try
         {
-            m_BufferCount = Dev.getSwapchainImageCountKHR(m_VkSwapChain);
+            vk::throwResultException(Dev.getSwapchainImagesKHR(m_VkSwapchain, &m_BufferCount, nullptr, Dispatch), "Failed to get buffer count");
         }
         catch (const vk::SystemError& Error)
         {
@@ -383,29 +466,161 @@ namespace Qgfx
             QGFX_LOG_INFO_MESSAGE("Created swap chain with ", m_BufferCount, " images vs ", m_DesiredBufferCount, " requested.");
         }
 
-        m_ImageAcquiredSemaphores.resize(m_BufferCount);
-        m_DrawCompleteSemaphores.resize(m_BufferCount);
+        m_bImageAcquired.resize(m_BufferCount);
         m_ImageAcquiredFences.resize(m_BufferCount);
+        m_ImageAcquiredSemaphores.resize(m_BufferCount);
+        m_SubmitCompleteSemaphores.resize(m_BufferCount);
+
         for (uint32_t i = 0; i < m_BufferCount; ++i)
         {
-            vk::SemaphoreCreateInfo SemaphoreCI = {};
-
-            SemaphoreCI.pNext = nullptr;
-            SemaphoreCI.flags = {}; // reserved for future use
-
-            m_ImageAcquiredSemaphores[i] = Dev.createSemaphore(SemaphoreCI);
-            m_DrawCompleteSemaphores[i] = Dev.createSemaphore(SemaphoreCI);
+            m_bImageAcquired[i] = false;
 
             vk::FenceCreateInfo FenceCI = {};
 
             FenceCI.pNext = nullptr;
             FenceCI.flags = {};
 
-            m_ImageAcquiredFences[i] = Dev.createFence(FenceCI);
+            m_ImageAcquiredFences[i] = Dev.createFence(FenceCI, nullptr, Dispatch);
+
+            vk::SemaphoreCreateInfo SemaphoreCI = {};
+
+            SemaphoreCI.pNext = nullptr;
+            SemaphoreCI.flags = {}; // reserved for future use
+
+            m_ImageAcquiredSemaphores[i] = Dev.createSemaphore(SemaphoreCI, nullptr, Dispatch);
+            m_SubmitCompleteSemaphores[i] = Dev.createSemaphore(SemaphoreCI, nullptr, Dispatch);
         }
+        m_SemaphoreIndex = m_BufferCount - 1;
 	}
 
-    void SwapChainVk::AcquireNextImage()
+    //vk::Result SwapChainVk::AcquireNextImage()
+    //{
+    //    // Applications should not rely on vkAcquireNextImageKHR blocking in order to
+    //    // meter their rendering speed. The implementation may return from this function
+    //    // immediately regardless of how many presentation requests are queued, and regardless
+    //    // of when queued presentation requests will complete relative to the call. Instead,
+    //    // applications can use fence to meter their frame generation work to match the
+    //    // presentation rate.
+
+    //    // Explicitly make sure that there are no more pending frames in the command queue
+    //    // than the number of the swap chain images.
+    //    //
+    //    // Nsc = 3 - number of the swap chain images
+    //    //
+    //    //   N-Ns          N-2           N-1            N (Current frame)
+    //    //    |             |             |             |
+    //    //                  |
+    //    //          Wait for this fence
+    //    //
+    //    // When acquiring swap chain image for frame N, we need to make sure that
+    //    // frame N-Nsc has completed. To achieve that, we wait for the image acquire
+    //    // fence for frame N-Nsc-1. Thus we will have no more than Nsc frames in the queue.
+    //    auto& OldestSubmittedSemaphoreChain = m_SemaphoreChains[(m_SemaphoreIndex + 1u) % m_BufferCount];
+    //    if (OldestSubmittedSemaphoreChain.bAcquired)
+    //    {
+    //        vk::Fence OldestSubmittedFence = OldestSubmittedSemaphoreChain.AcquireFence;
+
+    //        if (m_spRenderDevice->GetVkqDevice().getFenceStatus(OldestSubmittedFence) == vk::Result::eNotReady)
+    //        {
+    //            vk::Result Res = m_spRenderDevice->GetVkqDevice().waitForFences(OldestSubmittedFence, true, UINT64_MAX);
+    //            QGFX_VERIFY_EXPR(Res = vk::Result::eSuccess);
+    //            (void)Res;
+    //        }
+
+    //        m_spRenderDevice->GetVkqDevice().resetFence(OldestSubmittedFence);
+
+
+    //        OldestSubmittedSemaphoreChain.bAcquired = false;
+    //    }
+
+    //    vk::Fence ImageAcquiredFence = m_SemaphoreChains[m_SemaphoreIndex].AcquireFence;
+    //    vk::Semaphore ImageAcquiredSemaphore = m_SemaphoreChains[m_SemaphoreIndex].AcquireSemaphore;
+
+    //    vk::Result Res = m_Swapchain.acquireNextImage(UINT64_MAX, ImageAcquiredSemaphore, ImageAcquiredFence, &m_BackBufferIndex);
+
+    //    m_SemaphoreChains[m_SemaphoreIndex].bAcquired = (Res == vk::Result::eSuccess);
+    //    m_SemaphoreChains[m_SemaphoreIndex].CurrentWaitSemaphore = m_SemaphoreChains[m_SemaphoreIndex].AcquireSemaphore;
+    //    //if (res == VK_SUCCESS)
+    //    //{
+    //    //    // Next command in the device context must wait for the next image to be acquired.
+    //    //    // Unlike fences or events, the act of waiting for a semaphore also unsignals that semaphore (6.4.2).
+    //    //    // Swapchain image may be used as render target or as destination for copy command.
+    //    //    pDeviceCtxVk->AddWaitSemaphore(m_ImageAcquiredSemaphores[m_SemaphoreIndex], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
+    //    //    if (!m_SwapChainImagesInitialized[m_BackBufferIndex])
+    //    //    {
+    //    //        // Vulkan validation layers do not like uninitialized memory.
+    //    //        // Clear back buffer first time we acquire it.
+
+    //    //        ITextureView* pRTV = GetCurrentBackBufferRTV();
+    //    //        ITextureView* pDSV = GetDepthBufferDSV();
+    //    //        pDeviceCtxVk->SetRenderTargets(1, &pRTV, pDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    //    //        pDeviceCtxVk->ClearRenderTarget(GetCurrentBackBufferRTV(), nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    //    //        m_SwapChainImagesInitialized[m_BackBufferIndex] = true;
+    //    //    }
+    //    //    pDeviceCtxVk->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_NONE);
+    //    //}
+
+    //    return Res;
+    //}
+
+    //void SwapChainVk::Acquire(bool bVsync)
+    //{
+    //    if (!m_bIsMinimized)
+    //    {
+
+    //        vk::Result Res = (bVsync == m_bVSyncEnabled) ? AcquireNextImage() : vk::Result::eErrorOutOfDateKHR;
+
+    //        if (Res == vk::Result::eSuboptimalKHR || Res == vk::Result::eErrorOutOfDateKHR)
+    //        {
+    //            m_bVSyncEnabled = bVsync;
+    //            RecreateSwapChain();
+    //            m_SemaphoreIndex = m_BufferCount - 1; // To start with 0 index when acquire next image
+
+    //            Res = AcquireNextImage();
+    //        }
+    //        QGFX_VERIFY(Res == vk::Result::eSuccess, "Failed to acquire next swap chain image");
+    //    }
+    //}
+
+    void SwapChainVk::ReleaseSwapChainResources()
     {
+        if (!m_VkSwapchain)
+            return;
+
+        m_spRenderDevice->WaitIdle();
+    }
+
+    void SwapChainVk::RecreateSwapChain()
+    {
+        ReleaseSwapChainResources();
+
+        // Check if the surface is lost
+        {
+            auto& VkPhDeviceHandle = m_spRenderDevice->GetVkPhysicalDevice();
+            auto& VkDeviceHandle = m_spRenderDevice->GetVkDevice();
+            auto& VkDispatch = m_spRenderDevice->GetVkDispatch();
+
+            try
+            {
+                vk::SurfaceCapabilitiesKHR SurfCapabilities = VkPhDeviceHandle.getSurfaceCapabilitiesKHR(m_VkSurface, VkDispatch);
+                (void)SurfCapabilities;
+            }
+            catch (const vk::SurfaceLostKHRError&)
+            {
+                if (m_VkSwapchain)
+                {
+                    VkDeviceHandle.destroySwapchainKHR(m_VkSwapchain, nullptr, VkDispatch);
+                }
+
+                // Recreate the surface
+                CreateSurface();
+            }
+            catch (const vk::SystemError& Error)
+            {
+                QGFX_LOG_ERROR_AND_THROW("Failed to query physical device surface capabilities: ", Error.what());
+            }
+        }
+
+        CreateSwapChain();
     }
 }

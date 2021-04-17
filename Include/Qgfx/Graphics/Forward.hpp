@@ -3,6 +3,7 @@
 namespace Qgfx
 {
 	class IBuffer;
+	class ICommandQueue;
 	class IEngineFactory;
 	class IFence;
 	class IObject;

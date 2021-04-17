@@ -4,7 +4,9 @@
 #error QGFX_VULKAN_SUPPORTED must be defined to include Vulkan related headers.
 #endif
 
-#include <quantumvk/quantumvk.hpp>
+#define VK_NO_PROTOTYPES
+
+#include <vulkan/vulkan.hpp>
 
 #ifndef VK_VERSION_1_2
 #error Vulkan Headers do not support vulkan 1.2.

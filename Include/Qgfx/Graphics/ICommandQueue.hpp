@@ -5,6 +5,7 @@
 #include "IObject.hpp"
 
 #include "ISwapChain.hpp"
+#include "ICommandBuffer.hpp"
 
 namespace Qgfx
 {
@@ -22,8 +23,10 @@ namespace Qgfx
 
 		virtual CommandQueueType GetType() const = 0;
 
+		virtual void CreateCommandBuffer(ICommandBuffer** ppCommandBuffer) = 0;
+
 		/**
-		 * @brief Once all current pending work on the gpu is completed, it will signal this fence to value.
+		 * @brief Once all current pending work on the queue is completed, it will signal this fence to value.
 		 * @param pFence 
 		 * @param Value 
 		*/
@@ -38,6 +41,10 @@ namespace Qgfx
 
 		virtual void WaitIdle() = 0;
 
-		virtual void Present(uint32_t NumSwapChains, ISwapChain** ppSwapChains) = 0;
+		virtual void Acquire(ISwapChain* pSwapChain) = 0;
+
+		virtual void SubmitCommandBuffers(uint32_t NumCommandBuffers, ICommandBuffer** ppCommandBuffers) = 0;
+
+		virtual void Present(ISwapChain* pSwapChain) = 0;
 	};
 }

@@ -1,4 +1,5 @@
 #include "Qgfx/Graphics/Vulkan/RenderDeviceVk.hpp"
+#include "Qgfx/Graphics/Vulkan/FenceVk.hpp"
 
 namespace Qgfx
 {
@@ -36,8 +37,9 @@ namespace Qgfx
 	RenderDeviceVk::RenderDeviceVk(RefCounter* pRefCounter, EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo)
 		: IRenderDevice(pRefCounter)
 	{
-		m_spEngineFactory = pEngineFactory;
-		m_PhysicalDevice = CreateInfo.PhysicalDeviceVk;
+		m_spEngineFactory =  pEngineFactory;
+		m_VkDispatch = pEngineFactory->GetVkDispatch();
+		m_VkPhysicalDevice = CreateInfo.PhysicalDeviceVk;
 
 		// Features
 
@@ -53,7 +55,7 @@ namespace Qgfx
 		SupportedFeatures2.pNext = &Supported11Features;
 		Supported11Features.pNext = &Supported12Features;
 
-		m_PhysicalDevice.getFeatures2(&SupportedFeatures2);
+		m_VkPhysicalDevice.getFeatures2(&SupportedFeatures2, m_VkDispatch);
 
 		vk::PhysicalDeviceFeatures2 EnabledFeatures2{};
 		vk::PhysicalDeviceFeatures& Enabled10Features = EnabledFeatures2.features;
@@ -65,6 +67,13 @@ namespace Qgfx
 		m_DeviceFeatures.GeometryShaders = GetFeatureState(RequestedFeatures.GeometryShaders, Supported10Features.geometryShader, Enabled10Features.geometryShader, "Geometry shaders are");
 		m_DeviceFeatures.TesselationShaders = GetFeatureState(RequestedFeatures.TesselationShaders, Supported10Features.tessellationShader, Enabled10Features.tessellationShader, "Tesselation is");
 		m_DeviceFeatures.WireFrameFill = GetFeatureState(RequestedFeatures.WireFrameFill, Supported10Features.fillModeNonSolid, Enabled10Features.fillModeNonSolid, "Wireframe fill is");
+		
+
+		if (Supported12Features.timelineSemaphore)
+		{
+			Enabled12Features.timelineSemaphore = true;
+			m_bTimelineSemaphoresSupported = true;
+		}
 
 		// Extensions
 		std::vector<const char*> EnabledExtensions{};
@@ -74,9 +83,9 @@ namespace Qgfx
 		// Queues ////////////////
 		//////////////////////////
 
-		std::vector<vk::QueueFamilyProperties> QueueFamiles = m_PhysicalDevice.getQueueFamilyProperties();
+		std::vector<vk::QueueFamilyProperties> QueueFamiles = m_VkPhysicalDevice.getQueueFamilyProperties(m_VkDispatch);
 
-		std::vector<uint32_t> UniversalQueueFamilies{};
+		std::vector<uint32_t> GeneralQueueFamilies{};
 		std::vector<uint32_t> ComputeQueueFamilies{};
 		std::vector<uint32_t> TransferQueueFamilies{};
 
@@ -96,14 +105,14 @@ namespace Qgfx
 			bool bSupportsPresentation = false; // Whether or not the queue supports presentation
 
 #ifdef QGFX_PLATFORM_WIN32
-			bSupportsPresentation = m_PhysicalDevice.vkHandle().getWin32PresentationSupportKHR(QueueFamilyIndex, m_PhysicalDevice.dispatch());
+			bSupportsPresentation = m_VkPhysicalDevice.getWin32PresentationSupportKHR(QueueFamilyIndex, m_VkDispatch);
 #else
 			bSupportsPresentation = static_cast<bool>(QueueFamily.queueFlags & vk::QueueFlagBits::eGraphics);
 #endif
 			if (QueueFamily.queueFlags & vk::QueueFlagBits::eGraphics)
 			{ // Supports Graphics, Compute, and Transfer
 				if(bSupportsPresentation)
-					UniversalQueueFamilies.push_back(QueueFamilyIndex);
+					GeneralQueueFamilies.push_back(QueueFamilyIndex);
 			}
 			else if (QueueFamily.queueFlags & vk::QueueFlagBits::eCompute)
 			{ // Supports Compute and Transfer
@@ -118,7 +127,7 @@ namespace Qgfx
 			CurrentQueueIndex.push_back(0);
 		}
 
-		if (UniversalQueueFamilies.size() >= 1)
+		if (GeneralQueueFamilies.size() >= 1)
 		{
 			QGFX_LOG_ERROR_AND_THROW("Device doesn't support graphics queue family with present capibilities");
 		}
@@ -142,7 +151,7 @@ namespace Qgfx
 			// Finds best queue //
 			//////////////////////
 
-			if (QueueFamily == UINT32_MAX && QueueInfo.QueueType == CommandQueueType::AsyncTransfer)
+			if (QueueFamily == UINT32_MAX && QueueInfo.QueueType == CommandQueueType::Transfer)
 			{
 				for (uint32_t QueueFamilyIndex : TransferQueueFamilies)
 				{
@@ -155,8 +164,8 @@ namespace Qgfx
 				}
 			}
 
-			if (QueueFamily == UINT32_MAX && (QueueInfo.QueueType == CommandQueueType::AsyncTransfer ||
-											 QueueInfo.QueueType == CommandQueueType::AsyncCompute))
+			if (QueueFamily == UINT32_MAX && (QueueInfo.QueueType == CommandQueueType::Transfer ||
+											 QueueInfo.QueueType == CommandQueueType::Compute))
 			{
 				for (uint32_t QueueFamilyIndex : ComputeQueueFamilies)
 				{
@@ -169,11 +178,11 @@ namespace Qgfx
 				}
 			}
 
-			if (QueueFamily == UINT32_MAX && (QueueInfo.QueueType == CommandQueueType::AsyncTransfer ||
-											 QueueInfo.QueueType == CommandQueueType::AsyncCompute ||
-											 QueueInfo.QueueType == CommandQueueType::Universal))
+			if (QueueFamily == UINT32_MAX && (QueueInfo.QueueType == CommandQueueType::Transfer||
+											 QueueInfo.QueueType == CommandQueueType::Compute ||
+											 QueueInfo.QueueType == CommandQueueType::General))
 			{
-				for (uint32_t QueueFamilyIndex : UniversalQueueFamilies)
+				for (uint32_t QueueFamilyIndex : GeneralQueueFamilies)
 				{
 					if (CurrentQueueIndex[QueueFamilyIndex] < QueueFamiles[QueueFamilyIndex].queueCount)
 					{
@@ -259,7 +268,8 @@ namespace Qgfx
 
 		try
 		{
-			m_LogicalDevice = vkq::Device::create(m_PhysicalDevice, DeviceCreateInfo);
+			m_VkDevice = m_VkPhysicalDevice.createDevice(DeviceCreateInfo, nullptr, m_VkDispatch);
+			m_VkDispatch.init(m_VkDevice);
 		}
 		catch (const vk::SystemError& Error)
 		{
@@ -269,35 +279,41 @@ namespace Qgfx
 		// Set queue handles
 		for (QueueDesc& Queue : m_Queues)
 		{
-			Queue.Handle = vkq::Queue::create(m_LogicalDevice, Queue.FamilyIndex, Queue.Index);
+			Queue.Handle = m_VkDevice.getQueue(Queue.FamilyIndex, Queue.Index, m_VkDispatch);
 		}
 	}
 
 	RenderDeviceVk::~RenderDeviceVk()
 	{
-		m_LogicalDevice.destroy();
-		m_PhysicalDevice.reset();
+		m_VkDevice.destroy();
+		m_VkPhysicalDevice = nullptr;
 	}
 
 	void RenderDeviceVk::QueueWaitIdle(uint32_t QueueIndex)
 	{
 		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
-		m_Queues[QueueIndex].Handle.waitIdle();
+		m_Queues[QueueIndex].Handle.waitIdle(m_VkDispatch);
 	}
 
 	void RenderDeviceVk::QueueSubmit(uint32_t QueueIndex, const vk::SubmitInfo& SubmitInfo, vk::Fence Fence)
 	{
 		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
-		m_Queues[QueueIndex].Handle.submit(SubmitInfo, Fence);
+		m_Queues[QueueIndex].Handle.submit(SubmitInfo, Fence, m_VkDispatch);
 	}
 
 	void RenderDeviceVk::QueuePresent(uint32_t QueueIndex, const vk::PresentInfoKHR& PresentInfo)
 	{
 		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
-		m_Queues[QueueIndex].Handle.presentKHR(PresentInfo);
+		m_Queues[QueueIndex].Handle.presentKHR(PresentInfo, m_VkDispatch);
 	}
 
-	vkq::Queue RenderDeviceVk::GetVkqQueue(uint32_t QueueIndex)
+	uint32_t RenderDeviceVk::GetQueueFamilyIndex(uint32_t QueueIndex)
+	{
+		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
+		return m_Queues[QueueIndex].FamilyIndex;
+	}
+
+	vk::Queue RenderDeviceVk::GetVkQueue(uint32_t QueueIndex)
 	{
 		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
 		return m_Queues[QueueIndex].Handle;
@@ -311,6 +327,18 @@ namespace Qgfx
 
 	void RenderDeviceVk::WaitIdle()
 	{
-		m_LogicalDevice.waitIdle();
+		m_VkDevice.waitIdle(m_VkDispatch);
+	}
+
+	void RenderDeviceVk::CreateFence(uint64_t InitialValue, IFence** ppFence)
+	{
+		if (m_bTimelineSemaphoresSupported)
+		{
+			*ppFence = MakeRefCountedObj<TimelineFenceVk>()(this, InitialValue);
+		}
+		else
+		{
+			QGFX_UNSUPPORTED("This is currently unsupported");
+		}
 	}
 }

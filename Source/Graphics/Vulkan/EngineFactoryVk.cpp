@@ -15,7 +15,8 @@ namespace Qgfx
 	EngineFactoryVk::EngineFactoryVk(RefCounter* pRefCounter, const EngineFactoryCreateInfoVk& CreateInfo)
 		: IEngineFactory(pRefCounter)
 	{
-		m_Loader = vkq::Loader::create(CreateInfo.pfnLoaderHandle);
+
+		m_VkDispatch.init(CreateInfo.pfnLoaderHandle);
 
 		std::vector<const char*> EnabledExtensions{};
 		std::vector<const char*> EnabledLayers{};
@@ -26,9 +27,39 @@ namespace Qgfx
 		EnabledExtensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
 #endif
 
+		std::vector<vk::LayerProperties> SupportedLayers = vk::enumerateInstanceLayerProperties(m_VkDispatch);
+		std::vector<vk::ExtensionProperties> SupportedExtensions = vk::enumerateInstanceExtensionProperties(nullptr, m_VkDispatch);
+
+		auto IsLayerSupported = [&SupportedLayers](const char* LayerName) -> bool
+		{
+			for (const auto& Layer : SupportedLayers)
+			{
+				if (std::strcmp(Layer.layerName, LayerName) == 0)
+				{
+					return true;
+				}
+			}
+
+			return false;
+		};
+
+		auto IsExtensionSupported = [&SupportedExtensions](const char* ExtensionName) -> bool
+		{
+			for (const auto& Extension : SupportedExtensions)
+			{
+				if (std::strcmp(Extension.extensionName, ExtensionName) == 0)
+				{
+					return true;
+				}
+			}
+
+			return false;
+		};
+
+
 		if (CreateInfo.bEnableValidation)
 		{
-			if (m_Loader.isLayerSupported("VK_LAYER_KHRONOS_validation"))
+			if (IsLayerSupported("VK_LAYER_KHRONOS_validation"))
 			{
 				EnabledLayers.push_back("VK_LAYER_KHRONOS_validation");
 			}
@@ -37,7 +68,7 @@ namespace Qgfx
 				QGFX_LOG_ERROR("Validation enabled but VK_LAYER_KHRONOS_validation is not available. Make sure the proper Vulkan SDK is installed, and the appropriate pfnLoaderHandle provided.");
 			}
 
-			if (m_Loader.isInstanceExtensionSupported(VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
+			if (IsExtensionSupported(VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
 			{
 				EnabledExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 			}
@@ -47,15 +78,27 @@ namespace Qgfx
 			}
 		}
 
+		vk::ApplicationInfo AppInfo{};
+		AppInfo.pNext = nullptr;
+		AppInfo.apiVersion = VK_MAKE_VERSION(1, 2, 0);
+		AppInfo.applicationVersion = CreateInfo.AppVersion;
+		AppInfo.pApplicationName = CreateInfo.AppName;
+		AppInfo.engineVersion = CreateInfo.EngineVersion;
+		AppInfo.pEngineName = CreateInfo.EngineName;
+
+		vk::InstanceCreateInfo InstanceCI{};
+		InstanceCI.pNext = nullptr;
+		InstanceCI.flags = {};
+		InstanceCI.pApplicationInfo = &AppInfo;
+		InstanceCI.enabledLayerCount = static_cast<uint32_t>(EnabledLayers.size());
+		InstanceCI.ppEnabledLayerNames = EnabledLayers.data();
+		InstanceCI.enabledExtensionCount = static_cast<uint32_t>(EnabledExtensions.size());
+		InstanceCI.ppEnabledExtensionNames = EnabledExtensions.data();
+
 		try
 		{
-			m_Instance = vkq::InstanceFactory(m_Loader)
-				.setAppName(CreateInfo.AppName).setAppVersion(CreateInfo.AppVersion)
-				.setEngineName(CreateInfo.EngineName).setEngineVersion(CreateInfo.EngineVersion)
-				.enableExtensions(EnabledExtensions)
-				.enableLayers(EnabledLayers)
-				.requireApiVersion(1, 2, 0)
-				.build();
+			m_VkInstance = vk::createInstance(InstanceCI, nullptr, m_VkDispatch);
+			m_VkDispatch.init(m_VkInstance);
 		}
 		catch (const vk::SystemError& Error)
 		{
@@ -65,8 +108,7 @@ namespace Qgfx
 	
 	EngineFactoryVk::~EngineFactoryVk()
 	{
-		m_Instance.destroy();
-		m_Loader.destroy();
+		m_VkInstance.destroy(nullptr, m_VkDispatch);
 	}
 
 	void EngineFactoryVk::CreateRenderDevice(const RenderDeviceCreateInfoVk& DeviceCreateInfo, uint32_t* pNumSupportedQueues, IRenderDevice** ppDevice)
