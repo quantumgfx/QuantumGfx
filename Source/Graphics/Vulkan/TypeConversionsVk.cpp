@@ -66,11 +66,11 @@ namespace Qgfx
 			break;
 		case Qgfx::TextureFormat::R8Sint:
 			break;
-		case Qgfx::TextureFormat::D32Float:       return vk::Format::eD32Sfloat;
-		case Qgfx::TextureFormat::D32FloatS8Uint: return vk::Format::eD32SfloatS8Uint;
-		case Qgfx::TextureFormat::D24UnormS8Uint: return vk::Format::eD24UnormS8Uint;
-		case Qgfx::TextureFormat::D16Unorm:       return vk::Format::eD16Unorm;
-		case Qgfx::TextureFormat::D16UnormS8Uint: return vk::Format::eD16UnormS8Uint;
+		case Qgfx::TextureFormat::Depth32Float:       return vk::Format::eD32Sfloat;
+		case Qgfx::TextureFormat::Depth32FloatStencil8Uint: return vk::Format::eD32SfloatS8Uint;
+		case Qgfx::TextureFormat::Depth24PlusStencil8Uint: return vk::Format::eD24UnormS8Uint;
+		case Qgfx::TextureFormat::Depth16Unorm:       return vk::Format::eD16Unorm;
+		case Qgfx::TextureFormat::Depth16UnormStencil8Uint: return vk::Format::eD16UnormS8Uint;
 		default: return vk::Format::eUndefined;
 		}
 	}

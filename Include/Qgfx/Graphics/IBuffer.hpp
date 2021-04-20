@@ -11,8 +11,6 @@ namespace Qgfx
 		BufferUsageFlags Usage = {};
 
 		BufferMemoryType MemoryType = BufferMemoryType::Immutable;
-
-		CPUAccessFlags CPUAccess = CPUAccessFlagBits::None;
 	};
 
 	class IBuffer

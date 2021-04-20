@@ -14,6 +14,46 @@
 
 namespace Qgfx
 {
+	class FencePoolVk
+	{
+	public:
+
+		FencePoolVk(RenderDeviceVk* pRenderDevice);
+		~FencePoolVk();
+
+		vk::Fence GetFence();
+
+		void DisposeFence(vk::Fence FenceVk);
+
+	private:
+
+		RefAutoPtr<RenderDeviceVk> m_spRenderDevice;
+
+		std::vector<vk::Fence> m_FencePool;
+	};
+
+	class BinarySemaphorePoolVk
+	{
+	public:
+
+		BinarySemaphorePoolVk(RenderDeviceVk* pRenderDevice);
+		~BinarySemaphorePoolVk();
+
+		vk::Semaphore GetSemaphore();
+
+		void DestroySemaphore(vk::Semaphore SemaphoreVk);
+
+		void RecycleSemaphore(vk::Semaphore SemaphoreVk);
+
+	private:
+
+		RefAutoPtr<RenderDeviceVk> m_spRenderDevice;
+
+		std::vector<vk::Semaphore> m_SemaphorePool;
+
+
+	};
+
 	class CommandQueueVk final : public ICommandQueue
 	{
 	public:
@@ -32,11 +72,23 @@ namespace Qgfx
 
 		void Present(const vk::PresentInfoKHR& PresentInfo);
 
+		void ReleasePoolAndBuffer(vk::CommandPool VkCmdPool, vk::CommandBuffer VkCmdBuffer);
+
+		/////////////////////////
+		// Semaphores ///////////
+		/////////////////////////
+
 		void AddSignalSemaphore(vk::Semaphore Signal);
 
 		void AddWaitSemaphore(vk::Semaphore Wait);
 
-		void ReleasePoolAndBuffer(vk::CommandPool VkCmdPool, vk::CommandBuffer VkCmdBuffer);
+		void DeleteSemaphoreWhenUnused(vk::Semaphore Semaphore);
+
+		/*vk::Semaphore GetAcquireSemaphore();
+
+		void DestroyAcquireSemaphore(vk::Semaphore Semaphore);
+
+		void RecycleAcquireSemaphoreOnceUnused();*/
 
 	private:
 
@@ -58,18 +110,32 @@ namespace Qgfx
 		std::vector<vk::Semaphore> m_SignalSemaphores;
 		std::vector<vk::Semaphore> m_WaitSemaphores;
 
-		struct Submission
+		uint64_t m_CompletedSubmissionIndex = 0;
+		uint64_t m_NextSubmissionIndex = 1;
+
+		struct SubmissionFence
 		{
+			uint64_t Index;
 			vk::Fence CompletetionFence;
-			std::vector<CommandPoolAndBuffer> CommandBuffers;
-			uint64_t ExecutionIndex;
 		};
 
-		std::deque<Submission> m_SubmissionsInFlight;
+		std::deque<SubmissionFence> m_SubmissionFences;
 
-		std::vector<Submission> m_AvailableSubmissions;
+		struct CommandBufferToFree
+		{
+			uint64_t Index;
+			CommandPoolAndBuffer PoolAndBuffer;
+		};
 
-		uint64_t m_NextExecutionIndex = 1;
+		std::deque<CommandBufferToFree> m_CommandBuffersToFree;
+
+		struct SemaphoreToDelete
+		{
+			uint32_t Index;
+			vk::Semaphore Semaphore;
+		};
+
+		std::deque<SemaphoreToDelete> m_SemaphoresToDelete;
 
 		//////////////////////////
 		// Handles ///////////////
@@ -80,6 +146,10 @@ namespace Qgfx
 		std::mutex m_Mutex;
 
 		PoolAllocator m_CommandBufferHandleAllocator;
+
+		FencePoolVk m_FencePool;
+
+		BinarySemaphorePoolVk m_AcquiredSemaphorePool;
 
 		//////////////////////////
 		// Basic Settings ////////

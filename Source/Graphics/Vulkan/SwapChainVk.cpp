@@ -30,6 +30,8 @@ namespace Qgfx
 
 	SwapChainVk::~SwapChainVk()
 	{
+        ReleaseSwapChainResources(true);
+
         if (m_VkSurface)
         {
             m_spRenderDevice->GetVkInstance().destroySurfaceKHR(m_VkSurface);
@@ -37,8 +39,10 @@ namespace Qgfx
         }
 	}
 
-    void SwapChainVk::Acquire()
+    void SwapChainVk::GetCurrentColorTextureView()
     {
+        // If current color texture is already set, it will return it here.
+
         vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
         const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
 
@@ -81,23 +85,29 @@ namespace Qgfx
             m_bImageAcquired[m_OldestSemaphoreIndex] = false;
         }
 
-        vk::Result Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, m_ImageAcquiredSemaphores[m_SemaphoreIndex], m_ImageAcquiredFences[m_SemaphoreIndex], &m_BackBufferIndex, VkDispatch);
+        vk::Semaphore ImageAcquiredSemaphore = m_spRenderDevice->CreateVkBinarySemaphore();
+
+        vk::Result Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, ImageAcquiredSemaphore, m_ImageAcquiredFences[m_SemaphoreIndex], &m_BackBufferIndex, VkDispatch);
 
         if (Res == vk::Result::eSuboptimalKHR || Res == vk::Result::eErrorOutOfDateKHR)
         {
             RecreateSwapChain();
 
+            m_spRenderDevice->DestroyVkSemaphore(ImageAcquiredSemaphore);
+
             m_SemaphoreIndex = 0; // To start with 0 index when acquire next image
 
-            vk::Result Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, m_ImageAcquiredSemaphores[m_SemaphoreIndex], m_ImageAcquiredFences[m_SemaphoreIndex], &m_BackBufferIndex, VkDispatch);
+            ImageAcquiredSemaphore = m_spRenderDevice->CreateVkBinarySemaphore();
 
-            Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, m_ImageAcquiredSemaphores[m_SemaphoreIndex], m_ImageAcquiredFences[m_SemaphoreIndex], &m_BackBufferIndex, VkDispatch);
+            Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, ImageAcquiredSemaphore, m_ImageAcquiredFences[m_SemaphoreIndex], &m_BackBufferIndex, VkDispatch);
         }
         QGFX_VERIFY(Res == vk::Result::eSuccess, "Failed to acquire next swap chain image");
 
         m_bImageAcquired[m_SemaphoreIndex] = (Res == vk::Result::eSuccess);
 
-        m_spCommandQueue->AddWaitSemaphore(m_ImageAcquiredSemaphores[m_SemaphoreIndex]);
+        m_spCommandQueue->AddWaitSemaphore(ImageAcquiredSemaphore);
+
+        m_spCommandQueue->DeleteSemaphoreWhenUnused(ImageAcquiredSemaphore);
     }
 
     void SwapChainVk::Present()
@@ -113,6 +123,92 @@ namespace Qgfx
         PresentInfo.pSwapchains = &m_VkSwapchain;
         PresentInfo.pImageIndices = &m_BackBufferIndex;
         PresentInfo.pResults = nullptr;
+    }
+
+    void SwapChainVk::Resize(uint32_t NewWidth, uint32_t NewHeight, SurfaceTransform NewPreTransform)
+    {
+        bool bRecreateSwapChain = false;
+
+#if 0
+        if (m_VkSurface)
+        {
+            // Check orientation
+            vk::PhysicalDevice VkPhDevice = m_spRenderDevice->GetVkPhysicalDevice();
+            vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
+            const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
+
+            vk::SurfaceCapabilitiesKHR surfCapabilities = {};
+
+            vk::Result err = VkPhDevice.getSurfaceCapabilitiesKHR(m_VkSurface, &surfCapabilities, VkDispatch);
+            if (err == vk::Result::eSuccess)
+            {
+                if (m_CurrentSurfaceTransform != surfCapabilities.currentTransform)
+                {
+                    // Surface orientation has changed - we need to recreate the swap chain
+                    bRecreateSwapChain = true;
+                }
+
+                constexpr auto Rotate90TransformFlags =
+                    vk::SurfaceTransformFlagBitsKHR::eRotate90 |
+                    vk::SurfaceTransformFlagBitsKHR::eRotate270 |
+                    vk::SurfaceTransformFlagBitsKHR::eHorizontalMirrorRotate90 |
+                    vk::SurfaceTransformFlagBitsKHR::eHorizontalMirrorRotate270;
+
+                if (NewWidth == 0 || NewHeight == 0)
+                {
+                    NewWidth = m_SurfaceIdentityExtent.width;
+                    NewHeight = m_SurfaceIdentityExtent.height;
+
+                    if (surfCapabilities.currentTransform & Rotate90TransformFlags)
+                    {
+                        // Swap to get logical dimensions as input NewWidth and NewHeight are
+                        // expected to be logical sizes.
+                        std::swap(NewWidth, NewHeight);
+                    }
+                }
+
+                if (NewPreTransform == SurfaceTransform::Optimal)
+                {
+                    if (surfCapabilities.currentTransform & Rotate90TransformFlags)
+                    {
+                        // Swap to get physical dimensions
+                        std::swap(NewWidth, NewHeight);
+                    }
+                }
+                else
+                {
+                    // Swap if necessary to get desired sizes after pre-transform
+                    if (NewPreTransform == SurfaceTransform::Rotate90 ||
+                        NewPreTransform == SurfaceTransform::Rotate270 ||
+                        NewPreTransform == SurfaceTransform::HorizontalMirrorRotate90 ||
+                        NewPreTransform == SurfaceTransform::HorizontalMirrorRotate270)
+                    {
+                        std::swap(NewWidth, NewHeight);
+                    }
+                }
+            }
+            else
+            {
+                QGFX_LOG_ERROR_MESSAGE(err, "Failed to query physical device surface capabilities");
+            }
+        }
+#endif
+
+        if (NewWidth != m_Width || NewHeight != m_Height || NewPreTransform != m_PreTransform)
+        {
+            m_Width = NewWidth;
+            m_Height = NewHeight;
+            m_DesiredPreTransform = NewPreTransform;
+
+            bRecreateSwapChain = true;
+        }
+
+        if (bRecreateSwapChain)
+        {
+            QGFX_LOG_INFO_MESSAGE("Resizing swapchain to (", NewWidth, ",", NewHeight, ")");
+
+            RecreateSwapChain();
+        }
     }
 
     void SwapChainVk::CreateSurface()
@@ -468,7 +564,6 @@ namespace Qgfx
 
         m_bImageAcquired.resize(m_BufferCount);
         m_ImageAcquiredFences.resize(m_BufferCount);
-        m_ImageAcquiredSemaphores.resize(m_BufferCount);
         m_SubmitCompleteSemaphores.resize(m_BufferCount);
 
         for (uint32_t i = 0; i < m_BufferCount; ++i)
@@ -487,7 +582,6 @@ namespace Qgfx
             SemaphoreCI.pNext = nullptr;
             SemaphoreCI.flags = {}; // reserved for future use
 
-            m_ImageAcquiredSemaphores[i] = Dev.createSemaphore(SemaphoreCI, nullptr, Dispatch);
             m_SubmitCompleteSemaphores[i] = Dev.createSemaphore(SemaphoreCI, nullptr, Dispatch);
         }
         m_SemaphoreIndex = m_BufferCount - 1;
@@ -582,17 +676,56 @@ namespace Qgfx
     //    }
     //}
 
-    void SwapChainVk::ReleaseSwapChainResources()
+    void SwapChainVk::WaitForImageAcquiredFences()
+    {
+        auto& VkDevice = m_spRenderDevice->GetVkDevice();
+        auto& VkDispatch = m_spRenderDevice->GetVkDispatch();
+
+        for (auto Fence : m_ImageAcquiredFences)
+        {
+            if (VkDevice.getFenceStatus(Fence, VkDispatch) == vk::Result::eNotReady)
+                VkDevice.waitForFences(1, &Fence, true, UINT64_MAX, VkDispatch);
+        }
+    }
+
+
+    void SwapChainVk::ReleaseSwapChainResources(bool bDestroySwapChain)
     {
         if (!m_VkSwapchain)
             return;
 
+        auto& VkDevice = m_spRenderDevice->GetVkDevice();
+        auto& VkDispatch = m_spRenderDevice->GetVkDispatch();
+
         m_spRenderDevice->WaitIdle();
+
+        WaitForImageAcquiredFences();
+
+        for (auto Fence : m_ImageAcquiredFences)
+        {
+            VkDevice.destroyFence(Fence, nullptr, VkDispatch);
+        }
+
+        for (auto Semaphore : m_SubmitCompleteSemaphores)
+        {
+            VkDevice.destroySemaphore(Semaphore, nullptr, VkDispatch);
+        }
+
+        m_bImageAcquired.clear();
+        m_ImageAcquiredFences.clear();
+        m_SubmitCompleteSemaphores.clear();
+
+        m_SemaphoreIndex = 0;
+
+        if (bDestroySwapChain)
+        {
+            VkDevice.destroySwapchainKHR(m_VkSwapchain, nullptr, VkDispatch);
+        }
     }
 
     void SwapChainVk::RecreateSwapChain()
     {
-        ReleaseSwapChainResources();
+        ReleaseSwapChainResources(false);
 
         // Check if the surface is lost
         {

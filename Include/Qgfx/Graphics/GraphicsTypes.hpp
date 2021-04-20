@@ -20,21 +20,6 @@ namespace Qgfx
         Vulkan = 1,
     };
 
-    enum class CPUAccessFlagBits
-    {
-        None = 0,
-        Read = 0x1,
-        Write = 0x2
-    };
-
-    template<>
-    struct EnableEnumFlags<CPUAccessFlagBits>
-    {
-        static const bool bEnabled = true;
-    };
-
-    using CPUAccessFlags = Flags<CPUAccessFlagBits>;
-
     enum class BufferMemoryType
     {
         /**
@@ -62,13 +47,17 @@ namespace Qgfx
 
     enum class BufferUsageFlagBits
     {
-        None = 0x00,
-        Vertex = 0x01,
-        Uniform = 0x02,
-        Index = 0x04,
-        Indirect = 0x08,
-        ShaderResource = 0x10,
-        UnorderedAccess = 0x20,
+        None = 0x000,
+        Vertex = 0x001,
+        Uniform = 0x002,
+        Index = 0x004,
+        Indirect = 0x008,
+        ShaderResource = 0x010,
+        UnorderedAccess = 0x020,
+        TransferSrc = 0x040,
+        TransferDst = 0x080,
+        MapRead = 0x100,
+        MapWrite = 0x100
     };
 
     template<>
@@ -94,9 +83,9 @@ namespace Qgfx
 
     enum class ImageState
     {
-        RenderTarget,
-        DepthReadOnly,
-        Depth,
+        RenderAttachment,
+        DepthReadOnlyAttachment,
+        DepthAttachment,
         ShaderResource,
         UnorderedAccess,
         TransferDst,
@@ -106,64 +95,70 @@ namespace Qgfx
 
     enum class TextureFormat
     {
-        RGBA32Float = 1,
-        RGBA32Uint,
-        RGBA32Sint,
+        // 8-bit formats
+        R8Unorm = 1,
+        R8Snorm,
+        R8Uint,
+        R8Sint,
 
-        RGBA16Float,
-        RGBA16Uint,
-        RGBA16Sint,
-
-        RG32Float,
-        RG32Uint,
-        RG32Sint,
-
-        RGB10A2Unorm,
-        RGB10A2Uint,
-
-        R11G11B10Float,
-
-        RGBA8Unorm,
-        RGBA8Snorm,
-        RGBA8Uint,
-        RGBA8Sint,
-        /**
-         * @brief Essentially identical to RGBA8Unorm, 
-         * except this format has more percision near 0.
-        */
-        RGBA8UnormSrgb,
-
-        RG16Float,
-        RG16Unorm,
-        RG16Snorm,
-        RG16Uint,
-        RG16Sint,
-
-        R32Float,
-        R32Uint,
-        R32Sint,
-
-        RG8Unorm,
-        RG8Snorm,
-        RG8Uint,
-        RG8Sint,
-
+        // 16-bit formats
         R16Float,
         R16Unorm,
         R16Snorm,
         R16Uint,
         R16Sint,
 
-        R8Unorm,
-        R8Snorm,
-        R8Uint,
-        R8Sint,
+        RG8Unorm,
+        RG8Snorm,
+        RG8Uint,
+        RG8Sint,
 
-        D32Float,
-        D32FloatS8Uint,
-        D24UnormS8Uint,
-        D16Unorm,
-        D16UnormS8Uint,
+        // 32-bit formats
+        R32Float,
+        R32Uint,
+        R32Sint,
+
+        RG16Float,
+        RG16Unorm,
+        RG16Snorm,
+        RG16Uint,
+        RG16Sint,
+        RGBA8Unorm,
+        RGBA8Snorm,
+        RGBA8Uint,
+        RGBA8Sint,
+        RGBA8UnormSrgb,
+
+        BGRA8Unorm,
+        BGRA8UnormSrgb,
+        // Packed 32-bit formats
+        RGB10A2Unorm,
+        RGB10A2Uint,
+        R11G11B10Float,
+
+        // 64-bit formats
+        RG32Float,
+        RG32Uint,
+        RG32Sint,
+
+        RGBA16Float,
+        RGBA16Uint,
+        RGBA16Sint,
+
+        // 128-bit formats
+        RGBA32Float,
+        RGBA32Uint,
+        RGBA32Sint,
+       
+        // Depth and stencil formats
+        Stencil8Uint,            // Might be implemented as real Stencil8Uint or Depth24PlusStencil8Uint if that is not available.
+        Depth16Unorm, 
+        Depth24Plus,             // Might be implemented as Depth24Unorm or Depth32Float
+        Depth24PlusStencil8Uint, // Might be implemented as Depth24UnormStencil8Uint or Depth32FloatStencil8Uint32
+        Depth32Float,
+        // Optional depth and stencil formats
+        Depth16UnormStencil8Uint,
+        Depth32FloatStencil8Uint,
     };
 
     enum class SwapChainUsageFlagBits

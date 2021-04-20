@@ -6,8 +6,98 @@
 namespace Qgfx
 {
 
+	FencePoolVk::FencePoolVk(RenderDeviceVk* pRenderDevice)
+	{
+		m_spRenderDevice = pRenderDevice;
+	}
+
+	FencePoolVk::~FencePoolVk()
+	{
+		vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
+		const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
+
+		for (auto Fence : m_FencePool)
+		{
+			VkDevice.destroyFence(Fence, nullptr, VkDispatch);
+		}
+
+		m_FencePool.clear();
+	}
+
+	vk::Fence FencePoolVk::GetFence()
+	{
+		vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
+		const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
+
+		vk::Fence Fence{};
+		if (!m_FencePool.empty())
+		{
+			Fence = m_FencePool.back();
+			VkDevice.resetFences(Fence, VkDispatch);
+			m_FencePool.pop_back();
+		}
+		else
+		{
+			vk::FenceCreateInfo FenceCI{};
+			FenceCI.pNext = nullptr;
+			FenceCI.flags = {};
+
+			Fence = VkDevice.createFence(FenceCI, nullptr, VkDispatch);
+		}
+	}
+
+	void FencePoolVk::DisposeFence(vk::Fence FenceVk)
+	{
+		m_FencePool.push_back(FenceVk);
+	}
+
+	BinarySemaphorePoolVk::BinarySemaphorePoolVk(RenderDeviceVk* pRenderDevice)
+	{
+		m_spRenderDevice = pRenderDevice;
+	}
+
+	BinarySemaphorePoolVk::~BinarySemaphorePoolVk()
+	{
+		for (auto Semaphore : m_SemaphorePool)
+		{
+			m_spRenderDevice->DestroyVkSemaphore(Semaphore);
+		}
+
+		m_SemaphorePool.clear();
+	}
+
+	vk::Semaphore BinarySemaphorePoolVk::GetSemaphore()
+	{
+
+		vk::Semaphore Semaphore{};
+		if (!m_SemaphorePool.empty())
+		{
+			Semaphore = m_SemaphorePool.back();
+			m_SemaphorePool.pop_back();
+		}
+		else
+		{
+			Semaphore = m_spRenderDevice->CreateVkBinarySemaphore();
+		}
+
+		return Semaphore;
+	}
+
+	void BinarySemaphorePoolVk::DestroySemaphore(vk::Semaphore SemaphoreVk)
+	{
+		vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
+		const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
+
+		VkDevice.destroySemaphore(SemaphoreVk, nullptr, VkDispatch);
+	}
+
+	void BinarySemaphorePoolVk::RecycleSemaphore(vk::Semaphore SemaphoreVk)
+	{
+		m_SemaphorePool.push_back(SemaphoreVk);
+	}
+
 	CommandQueueVk::CommandQueueVk(RefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, uint32_t QueueIndex)
-		: ICommandQueue(pRefCounter)
+		: ICommandQueue(pRefCounter), m_FencePool(pRenderDevice), m_AcquiredSemaphorePool(pRenderDevice)
 	{
 		m_spRenderDevice = pRenderDevice;
 		m_QueueIndex = QueueIndex;
@@ -39,14 +129,6 @@ namespace Qgfx
 
 			m_AvailablePoolsAndBuffers.pop_back();
 		}
-
-		while (!m_AvailableSubmissions.empty())
-		{
-			Submission& Back = m_AvailableSubmissions.back();
-			VkDevice.destroyFence(Back.CompletetionFence, nullptr, VkDispatch);
-
-			m_AvailableSubmissions.pop_back();
-		}
 	}
 
 	void CommandQueueVk::SubmitCommandBuffers(uint32_t NumCommandBuffers, ICommandBuffer** ppCommandBuffers)
@@ -61,20 +143,11 @@ namespace Qgfx
 		if (NumCommandBuffers == 0 && m_WaitSemaphores.size() == 0 && m_SignalSemaphores.size() == 0)
 			return;
 
-		if (m_AvailableSubmissions.empty())
-		{
-			vk::FenceCreateInfo FenceCI{};
-			FenceCI.pNext = nullptr;
-			FenceCI.flags = {};
+		vk::FenceCreateInfo FenceCI{};
+		FenceCI.pNext = nullptr;
+		FenceCI.flags = {};
 
-			Submission Submit{};
-			Submit.CompletetionFence = VkDevice.createFence(FenceCI, nullptr, VkDispatch);
-
-			m_AvailableSubmissions.push_back(Submit);
-		}
-
-		Submission Submit = std::move(m_AvailableSubmissions.back());
-		m_AvailableSubmissions.pop_back();
+		vk::Fence CompletionFence = m_FencePool.GetFence();
 
 		std::vector<vk::CommandBuffer> CommandBuffers;
 
@@ -82,7 +155,13 @@ namespace Qgfx
 		{
 			CommandBufferVk* pCommandBuffer = ValidatedCast<CommandBufferVk>(ppCommandBuffers[Index]);
 			pCommandBuffer->m_State = CommandBufferState::Executing;
-			Submit.CommandBuffers.emplace_back(pCommandBuffer->m_VkCmdPool, pCommandBuffer->m_VkCmdBuffer);
+
+			CommandBufferToFree CmdBufferToFree{};
+			CmdBufferToFree.Index = m_NextSubmissionIndex;
+			CmdBufferToFree.PoolAndBuffer = { pCommandBuffer->m_VkCmdPool, pCommandBuffer->m_VkCmdBuffer };
+
+			m_CommandBuffersToFree.push_back(CmdBufferToFree);
+
 			CommandBuffers.push_back(pCommandBuffer->m_VkCmdBuffer);
 			pCommandBuffer->m_VkCmdPool = nullptr;
 			pCommandBuffer->m_VkCmdBuffer = nullptr;
@@ -100,15 +179,18 @@ namespace Qgfx
 		SubmitInfo.pWaitSemaphores = m_WaitSemaphores.data();
 		SubmitInfo.pWaitDstStageMask = WaitStageMasks.data();
 
-		m_spRenderDevice->QueueSubmit(m_QueueIndex, SubmitInfo, Submit.CompletetionFence);
+		m_spRenderDevice->QueueSubmit(m_QueueIndex, SubmitInfo, CompletionFence);
 
 		m_SignalSemaphores.clear();
 		m_WaitSemaphores.clear();
 
-		Submit.ExecutionIndex = m_NextExecutionIndex;
-		++m_NextExecutionIndex;
+		SubmissionFence Submission{};
+		Submission.Index = m_NextSubmissionIndex;
+		Submission.CompletetionFence = CompletionFence;
 
-		m_SubmissionsInFlight.push_back(std::move(Submit));
+		m_SubmissionFences.push_back(std::move(Submission));
+
+		++m_NextSubmissionIndex;
 	}
 
 	void CommandQueueVk::Present(const vk::PresentInfoKHR& PresentInfo)
@@ -127,6 +209,17 @@ namespace Qgfx
 		PoolAndBuffer.Buffer = VkCmdBuffer;
 
 		m_AvailablePoolsAndBuffers.push_back(PoolAndBuffer);
+	}
+
+	void CommandQueueVk::DeleteSemaphoreWhenUnused(vk::Semaphore Semaphore)
+	{
+		std::lock_guard Lock{ m_Mutex };
+
+		SemaphoreToDelete SemToDelete{};
+		SemToDelete.Index = m_NextSubmissionIndex;
+		SemToDelete.Semaphore = Semaphore;
+
+		m_SemaphoresToDelete.push_back(SemToDelete);
 	}
 
 	void CommandQueueVk::AddSignalSemaphore(vk::Semaphore Signal)
@@ -148,56 +241,61 @@ namespace Qgfx
 		vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
 		const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
 
-		while (!m_SubmissionsInFlight.empty())
+		while (!m_SubmissionFences.empty())
 		{
-			Submission& Front = m_SubmissionsInFlight.front();
+			SubmissionFence& Fence = m_SubmissionFences.front();
+			
+			vk::Result Res = VkDevice.getFenceStatus(Fence.CompletetionFence, VkDispatch);
 
-			vk::Result Res = VkDevice.getFenceStatus(Front.CompletetionFence, VkDispatch);
+			bool bCanRemove = (Res == vk::Result::eSuccess);
 
-			if (Res == vk::Result::eErrorDeviceLost)
-			{
-				QGFX_LOG_ERROR_AND_THROW("Unexpected device lost when checking fence status!");
-			}
-
-			if (bForceWaitIdle)
-			{
-				if (Res != vk::Result::eSuccess)
-					VkDevice.waitForFences(Front.CompletetionFence, true, UINT64_MAX, VkDispatch);
-
-				Front.ExecutionIndex = 1;
-				VkDevice.resetFences(Front.CompletetionFence, VkDispatch);
-
-				for (auto& PoolAndBuffer : Front.CommandBuffers)
+			if(bForceWaitIdle)
+				if (Res == vk::Result::eNotReady)
 				{
-					VkDevice.resetCommandPool(PoolAndBuffer.Pool, {}, VkDispatch);
-					m_AvailablePoolsAndBuffers.push_back(std::move(PoolAndBuffer));
+					VkDevice.waitForFences(Fence.CompletetionFence, true, UINT64_MAX, VkDispatch);
+					bCanRemove = true;
 				}
 
-				m_AvailableSubmissions.push_back(std::move(Front));
-
-				m_SubmissionsInFlight.pop_front();
+			if (bCanRemove)
+			{
+				m_CompletedSubmissionIndex = std::max(m_CompletedSubmissionIndex, Fence.Index);
+				m_FencePool.DisposeFence(Fence.CompletetionFence);
+				m_SubmissionFences.pop_front();
 			}
 			else
 			{
-				if (Res == vk::Result::eSuccess)
-				{
-					Front.ExecutionIndex = 1;
-					VkDevice.resetFences(Front.CompletetionFence, VkDispatch);
-					
-					for (auto& PoolAndBuffer : Front.CommandBuffers)
-					{
-						VkDevice.resetCommandPool(PoolAndBuffer.Pool, {}, VkDispatch);
-						m_AvailablePoolsAndBuffers.push_back(std::move(PoolAndBuffer));
-					}
+				break;
+			}
+		}
 
-					m_AvailableSubmissions.push_back(std::move(Front));
+		while (!m_CommandBuffersToFree.empty())
+		{
+			CommandBufferToFree& CmdToFree = m_CommandBuffersToFree.front();
 
-					m_SubmissionsInFlight.pop_front();
-				}
-				else
-				{
-					break;
-				}
+			if (CmdToFree.Index <= m_CompletedSubmissionIndex)
+			{
+				VkDevice.resetCommandPool(CmdToFree.PoolAndBuffer.Pool, {}, VkDispatch);
+				m_AvailablePoolsAndBuffers.push_back(CmdToFree.PoolAndBuffer);
+				m_CommandBuffersToFree.pop_front();
+			}
+			else
+			{
+				break;
+			}
+		}
+
+		while (!m_SemaphoresToDelete.empty())
+		{
+			SemaphoreToDelete& SemToDelete = m_SemaphoresToDelete.front();
+
+			if (SemToDelete.Index <= m_CompletedSubmissionIndex)
+			{
+				m_spRenderDevice->DestroyVkSemaphore(SemToDelete.Semaphore);
+				m_SemaphoresToDelete.pop_front();
+			}
+			else
+			{
+				break;
 			}
 		}
 	}

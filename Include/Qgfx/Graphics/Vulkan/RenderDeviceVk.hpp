@@ -22,28 +22,51 @@ namespace Qgfx
 
 		~RenderDeviceVk();
 
-		virtual void WaitIdle() override;
-
-		virtual void CreateFence(uint64_t InitialValue, IFence** ppFence) override;
+		///////////////////////////
+		// IRenderDevice Funcs ////
+		///////////////////////////
 
 		inline virtual const DeviceFeatures& GetFeatures() const override { return m_DeviceFeatures; }
 
 		inline uint32_t GetNumSupportedQueues() { return m_NumSupportedQueues; }
 
-		void QueueWaitIdle(uint32_t QueueIndex);
-		void QueueSubmit(uint32_t QueueIndex, const vk::SubmitInfo& SubmitInfo, vk::Fence Fence);
-		void QueuePresent(uint32_t QueueIndex, const vk::PresentInfoKHR& PresentInfo);
-		uint32_t GetQueueFamilyIndex(uint32_t QueueIndex);
+		virtual void CreateFence(uint64_t InitialValue, IFence** ppFence) override;
+
+		virtual void WaitIdle() override;
+
+		///////////////////////////
+		// Native Vk Functions ////
+		///////////////////////////
+
+		// Queues
 
 		vk::Queue GetVkQueue(uint32_t QueueIndex);
 
+		uint32_t GetQueueFamilyIndex(uint32_t QueueIndex);
+
 		CommandQueueType GetQueueType(uint32_t QueueIndex);
+
+		void QueueWaitIdle(uint32_t QueueIndex);
+		void QueueSubmit(uint32_t QueueIndex, const vk::SubmitInfo& SubmitInfo, vk::Fence Fence);
+		void QueuePresent(uint32_t QueueIndex, const vk::PresentInfoKHR& PresentInfo);
+
+		// Device
 
 		inline vk::Device GetVkDevice() const { return m_VkDevice; }
 
-		inline vk::Instance GetVkInstance() const { return m_spEngineFactory->GetVkInstance(); }
+		vk::Semaphore CreateVkBinarySemaphore() const;
+
+		void DestroyVkSemaphore(vk::Semaphore Sem) const;
+
+		// Physical Device
 
 		inline vk::PhysicalDevice GetVkPhysicalDevice() const { return m_VkPhysicalDevice; }
+
+		// Instance
+
+		inline vk::Instance GetVkInstance() const { return m_spEngineFactory->GetVkInstance(); }
+
+		// Dispatch
 
 		inline const vk::DispatchLoaderDynamic& GetVkDispatch() const { return m_VkDispatch; }
 

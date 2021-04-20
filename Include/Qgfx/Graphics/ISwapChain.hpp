@@ -80,9 +80,11 @@ namespace Qgfx
 
 		virtual void Resize(uint32_t NewWidth, uint32_t NewHeight, SurfaceTransform NewPreTransform = SurfaceTransform::Optimal) = 0;
 
-        virtual void Acquire() = 0;
-
         // virtual void GetCurrentPresentableImage();
+
+        virtual void GetCurrentColorTextureView() = 0;
+
+        virtual void GetCurrentDepthTextureView() = 0;
 
         virtual void Present() = 0;
 	};

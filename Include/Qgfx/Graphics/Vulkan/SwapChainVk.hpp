@@ -20,14 +20,14 @@ namespace Qgfx
 
 		virtual uint32_t GetWidth() override { return m_Width; }
 		virtual uint32_t GetHeight() override { return m_Height; }
-
 		virtual uint32_t GetBufferCount() override { return m_BufferCount; }
-
 		virtual SurfaceTransform GetSurfaceTransform() override { return m_PreTransform; }
 
-		virtual void Acquire() override;
+		virtual void GetCurrentColorTextureView() override;
 
 		virtual void Present() override;
+
+		virtual void Resize(uint32_t NewWidth, uint32_t NewHeight, SurfaceTransform NewPreTransform) override;
 
 	private:
 
@@ -36,7 +36,9 @@ namespace Qgfx
 
 		void RecreateSwapChain();
 
-		void ReleaseSwapChainResources();
+		void ReleaseSwapChainResources(bool bDestroySwapChain);
+
+		void WaitForImageAcquiredFences();
 
 	private:
 
@@ -85,7 +87,6 @@ namespace Qgfx
 
 		std::vector<bool> m_bImageAcquired;
 		std::vector<vk::Fence> m_ImageAcquiredFences;
-		std::vector<vk::Semaphore> m_ImageAcquiredSemaphores;
 		std::vector<vk::Semaphore> m_SubmitCompleteSemaphores;
 
 		uint32_t m_BackBufferIndex;

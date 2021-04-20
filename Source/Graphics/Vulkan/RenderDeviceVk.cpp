@@ -307,6 +307,20 @@ namespace Qgfx
 		m_Queues[QueueIndex].Handle.presentKHR(PresentInfo, m_VkDispatch);
 	}
 
+	vk::Semaphore RenderDeviceVk::CreateVkBinarySemaphore() const
+	{
+		vk::SemaphoreCreateInfo SemaphoreCI{};
+		SemaphoreCI.pNext = nullptr;
+		SemaphoreCI.flags = {};
+
+		return m_VkDevice.createSemaphore(SemaphoreCI, nullptr, m_VkDispatch);
+	}
+
+	void RenderDeviceVk::DestroyVkSemaphore(vk::Semaphore Sem) const
+	{
+		m_VkDevice.destroySemaphore(Sem, nullptr, m_VkDispatch);
+	}
+
 	uint32_t RenderDeviceVk::GetQueueFamilyIndex(uint32_t QueueIndex)
 	{
 		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");

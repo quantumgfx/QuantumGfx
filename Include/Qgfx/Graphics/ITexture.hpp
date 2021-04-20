@@ -10,8 +10,6 @@ namespace Qgfx
 
         ImageMemoryType MemoryType = ImageMemoryType::Immutable;
 
-        CPUAccessFlags CPUAccess = CPUAccessFlagBits::None;
-
 		uint32_t Width = 0;
 		uint32_t Height = 0;
 
