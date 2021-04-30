@@ -11,7 +11,7 @@ namespace Qgfx
 	{
 	public:
 
-		IEngineFactory(RefCounter* pRefCounter)
+		IEngineFactory(IRefCounter* pRefCounter)
 			: IObject(pRefCounter)
 		{
 		}

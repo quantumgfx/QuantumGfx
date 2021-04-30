@@ -1,9 +1,8 @@
 #pragma once
 
+#include "Forward.hpp"
 #include "GraphicsTypes.hpp"
-
 #include "IObject.hpp"
-
 #include "ISwapChain.hpp"
 #include "ICommandBuffer.hpp"
 
@@ -14,7 +13,7 @@ namespace Qgfx
 	{
 	public:
 
-		ICommandQueue(RefCounter* pRefCounter)
+		ICommandQueue(IRefCounter* pRefCounter)
 			: IObject(pRefCounter)
 		{
 		}
@@ -41,10 +40,6 @@ namespace Qgfx
 
 		virtual void WaitIdle() = 0;
 
-		virtual void Acquire(ISwapChain* pSwapChain) = 0;
-
 		virtual void SubmitCommandBuffers(uint32_t NumCommandBuffers, ICommandBuffer** ppCommandBuffers) = 0;
-
-		virtual void Present(ISwapChain* pSwapChain) = 0;
 	};
 }

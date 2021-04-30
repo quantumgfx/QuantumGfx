@@ -23,10 +23,12 @@ namespace Qgfx
 			return new uint8_t[Size];
 		}
 
-		void Free(void* Ptr) override
+		void Deallocate(void* Ptr, size_t Size) override
 		{
 			delete[] reinterpret_cast<uint8_t*>(Ptr);
 		}
+
+	private:
 
 	};
 }

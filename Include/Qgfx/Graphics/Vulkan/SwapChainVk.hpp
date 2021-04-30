@@ -14,20 +14,19 @@ namespace Qgfx
 	{
 	public:
 
-		SwapChainVk(RefCounter* pRefCounter, const SwapChainCreateInfo& CreateInfo, const NativeWindow& Window, RenderDeviceVk* pRenderDevice);
+		SwapChainVk(IRefCounter* pRefCounter, const SwapChainCreateInfo& CreateInfo, const NativeWindow& Window, RenderDeviceVk* pRenderDevice);
 
 		~SwapChainVk();
 
-		virtual uint32_t GetWidth() override { return m_Width; }
-		virtual uint32_t GetHeight() override { return m_Height; }
-		virtual uint32_t GetBufferCount() override { return m_BufferCount; }
-		virtual SurfaceTransform GetSurfaceTransform() override { return m_PreTransform; }
+		virtual void Resize(uint32_t NewWidth, uint32_t NewHeight, SurfaceTransform NewPreTransform) override;
 
-		virtual void GetCurrentColorTextureView() override;
+		virtual void AcquireNextTexture() override;
+
+		virtual ITexture* GetCurrentTexture() override;
+
+		virtual ITextureView* GetCurrentTextureView() override;
 
 		virtual void Present() override;
-
-		virtual void Resize(uint32_t NewWidth, uint32_t NewHeight, SurfaceTransform NewPreTransform) override;
 
 	private:
 
@@ -48,37 +47,14 @@ namespace Qgfx
 		// Handles /////////////////////
 		////////////////////////////////
 		
-		RefAutoPtr<RenderDeviceVk> m_spRenderDevice;
+		RefPtr<RenderDeviceVk> m_spRenderDevice;
 
-		RefAutoPtr<CommandQueueVk> m_spCommandQueue;
+		RefPtr<CommandQueueVk> m_spCommandQueue;
 
 		NativeWindow m_Window;
 
-		////////////////////////////////
-		// Settings ////////////////////
-		////////////////////////////////
-
-		TextureFormat       m_ColorBufferFormat;
-		TextureFormat       m_DepthBufferFormat;
 		SurfaceTransform    m_DesiredPreTransform;
-		uint32_t            m_DesiredBufferCount;
-		SwapChainUsageFlags m_Usage;
-		
-		/////////////////////////////////
-		// Current state ////////////////
-		/////////////////////////////////
-
-		uint32_t m_Width;
-		uint32_t m_Height;
-		uint32_t m_BufferCount = 0;
-		bool     m_bIsMinimized = false;
-		bool     m_bVSyncEnabled = true;
-
-		SurfaceTransform m_PreTransform;
-
-		///////////////////////////////////
-		// Vulkan Objects /////////////////
-		///////////////////////////////////
+		uint32_t            m_DesiredTextureCount;
 		
 		vk::SurfaceKHR m_VkSurface;
 		vk::SwapchainKHR m_VkSwapchain;
@@ -89,9 +65,13 @@ namespace Qgfx
 		std::vector<vk::Fence> m_ImageAcquiredFences;
 		std::vector<vk::Semaphore> m_SubmitCompleteSemaphores;
 
-		uint32_t m_BackBufferIndex;
+		uint32_t m_TextureIndex;
 
 		vk::Format m_VkColorFormat;
+
+		std::vector<ITexture*> m_FrameTextures;
+
+		bool m_bAcquired = false;
 
 #if 0 // For Andriod
 		// Surface extent corresponding to identity transform. We have to store this value,

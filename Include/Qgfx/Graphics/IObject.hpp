@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Common/RefCountedObject.hpp"
+#include "../Command/RefPtr.hpp"
 
 namespace Qgfx
 {
@@ -8,7 +9,7 @@ namespace Qgfx
 	{
 	public:
 
-		IObject(RefCounter* pRefCounter)
+		IObject(IRefCounter* pRefCounter)
 			: RefCountedObject{ pRefCounter }
 		{
 		}

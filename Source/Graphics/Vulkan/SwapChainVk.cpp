@@ -6,7 +6,7 @@
 
 namespace Qgfx
 {
-	SwapChainVk::SwapChainVk(RefCounter* pRefCounter, const SwapChainCreateInfo& CreateInfo, const NativeWindow& Window, RenderDeviceVk* pRenderDevice)
+	SwapChainVk::SwapChainVk(IRefCounter* pRefCounter, const SwapChainCreateInfo& CreateInfo, const NativeWindow& Window, RenderDeviceVk* pRenderDevice)
 		: ISwapChain(pRefCounter)
 	{
         QGFX_VERIFY_EXPR(CreateInfo.pQueue);
@@ -15,9 +15,8 @@ namespace Qgfx
         m_spCommandQueue = ValidatedCast<CommandQueueVk>(CreateInfo.pQueue);
         m_Window = Window;
 
-        m_ColorBufferFormat = CreateInfo.ColorBufferFormat;
-        m_DepthBufferFormat = CreateInfo.DepthBufferFormat;
-        m_DesiredBufferCount = CreateInfo.BufferCount;
+        m_TextureFormat = CreateInfo.Format;
+        m_DesiredTextureCount = CreateInfo.TextureCount;
         m_DesiredPreTransform = CreateInfo.PreTransform;
         m_Usage = CreateInfo.Usage;
 
@@ -39,9 +38,10 @@ namespace Qgfx
         }
 	}
 
-    void SwapChainVk::GetCurrentColorTextureView()
+    void SwapChainVk::AcquireNextTexture()
     {
-        // If current color texture is already set, it will return it here.
+
+        QGFX_VERIFY(!m_bAcquired, "Texture is already acquired");
 
         vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
         const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
@@ -67,9 +67,9 @@ namespace Qgfx
         // frame N-Nsc has completed. To achieve that, we wait for the image acquire
         // fence for frame N-Nsc-1. Thus we will have no more than Nsc frames in the queue.
 
-        m_SemaphoreIndex = (m_SemaphoreIndex + 1) % m_BufferCount;
+        m_SemaphoreIndex = (m_SemaphoreIndex + 1) % m_TextureCount;
 
-        uint32_t m_OldestSemaphoreIndex = (m_SemaphoreIndex + 1) % m_BufferCount;
+        uint32_t m_OldestSemaphoreIndex = (m_SemaphoreIndex + 1) % m_TextureCount;
 
         if (m_bImageAcquired[m_OldestSemaphoreIndex])
         {
@@ -87,7 +87,7 @@ namespace Qgfx
 
         vk::Semaphore ImageAcquiredSemaphore = m_spRenderDevice->CreateVkBinarySemaphore();
 
-        vk::Result Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, ImageAcquiredSemaphore, m_ImageAcquiredFences[m_SemaphoreIndex], &m_BackBufferIndex, VkDispatch);
+        vk::Result Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, ImageAcquiredSemaphore, m_ImageAcquiredFences[m_SemaphoreIndex], &m_TextureIndex, VkDispatch);
 
         if (Res == vk::Result::eSuboptimalKHR || Res == vk::Result::eErrorOutOfDateKHR)
         {
@@ -99,7 +99,7 @@ namespace Qgfx
 
             ImageAcquiredSemaphore = m_spRenderDevice->CreateVkBinarySemaphore();
 
-            Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, ImageAcquiredSemaphore, m_ImageAcquiredFences[m_SemaphoreIndex], &m_BackBufferIndex, VkDispatch);
+            Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, ImageAcquiredSemaphore, m_ImageAcquiredFences[m_SemaphoreIndex], &m_TextureIndex, VkDispatch);
         }
         QGFX_VERIFY(Res == vk::Result::eSuccess, "Failed to acquire next swap chain image");
 
@@ -108,10 +108,24 @@ namespace Qgfx
         m_spCommandQueue->AddWaitSemaphore(ImageAcquiredSemaphore);
 
         m_spCommandQueue->DeleteSemaphoreWhenUnused(ImageAcquiredSemaphore);
+
+        m_bAcquired = true;
+    }
+
+    ITexture* SwapChainVk::GetCurrentTexture()
+    {
+        return m_FrameTextures[m_TextureIndex];
+    }
+
+    ITextureView* SwapChainVk::GetCurrentTextureView()
+    {
+        return m_FrameTextures[m_TextureIndex]->GetDefaultView();
     }
 
     void SwapChainVk::Present()
     {
+        QGFX_VERIFY(m_bAcquired, "Swapchain must be acquired in order to present its containtss");
+
         m_spCommandQueue->AddSignalSemaphore(m_SubmitCompleteSemaphores[m_SemaphoreIndex]);
         m_spCommandQueue->SubmitCommandBuffers(0, nullptr);
 
@@ -121,7 +135,7 @@ namespace Qgfx
         PresentInfo.pWaitSemaphores = &m_SubmitCompleteSemaphores[m_SemaphoreIndex];
         PresentInfo.swapchainCount = 1;
         PresentInfo.pSwapchains = &m_VkSwapchain;
-        PresentInfo.pImageIndices = &m_BackBufferIndex;
+        PresentInfo.pImageIndices = &m_TextureIndex;
         PresentInfo.pResults = nullptr;
     }
 
@@ -257,7 +271,7 @@ namespace Qgfx
 			QGFX_LOG_ERROR_AND_THROW("Failed to query avalaible surface formats: ", Error.what());
 		}
 
-		m_VkColorFormat = TexFormatToVkFormat(m_ColorBufferFormat);
+		m_VkColorFormat = TexFormatToVkFormat(m_TextureFormat);
 
         vk::ColorSpaceKHR ColorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
         if (SupportedFormats.size() == 1 && SupportedFormats[0].format == vk::Format::eUndefined)
@@ -307,7 +321,7 @@ namespace Qgfx
                 {
                     QGFX_LOG_INFO_MESSAGE("Requested color buffer format ", vk::to_string(m_VkColorFormat), " is not supported by the surface and will be replaced with ", vk::to_string(VkReplacementColorFormat));
                     m_VkColorFormat = VkReplacementColorFormat;
-                    m_ColorBufferFormat = VkFormatToTexFormat(VkReplacementColorFormat);
+                    m_TextureFormat = VkFormatToTexFormat(VkReplacementColorFormat);
                 }
                 else
                 {
@@ -339,7 +353,7 @@ namespace Qgfx
         }
 
         vk::SurfaceTransformFlagBitsKHR VkPreTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
-        if (m_DesiredPreTransform != SurfaceTransform::Optimal)
+        if (m_DesiredPreTransform != SurfaceTransform::eOptimal)
         {
             VkPreTransform = SurfaceTransformToVkSurfaceTransformFlag(m_DesiredPreTransform);
             if (SurfCapabilities.supportedTransforms & VkPreTransform)
@@ -351,11 +365,11 @@ namespace Qgfx
                 //LOG_WARNING_MESSAGE(GetSurfaceTransformString(m_DesiredPreTransform),
                 //    " is not supported by the presentation engine. Optimal surface transform will be used instead."
                 //    " Query the swap chain description to get the actual surface transform.");
-                m_DesiredPreTransform = SurfaceTransform::Optimal;
+                m_DesiredPreTransform = SurfaceTransform::eOptimal;
             }
         }
 
-        if (m_DesiredPreTransform == SurfaceTransform::Optimal)
+        if (m_DesiredPreTransform == SurfaceTransform::eOptimal)
         {
             // Use current surface transform to avoid extra cost of presenting the image.
             // If preTransform does not match the currentTransform value returned by vkGetPhysicalDeviceSurfaceCapabilitiesKHR,
@@ -448,15 +462,15 @@ namespace Qgfx
         // Asking for minImageCount images ensures that we can acquire
         // 1 presentable image as long as we present it before attempting
         // to acquire another.
-        if (m_DesiredBufferCount < SurfCapabilities.minImageCount)
+        if (m_DesiredTextureCount < SurfCapabilities.minImageCount)
         {
-            QGFX_LOG_INFO_MESSAGE("Desired back buffer count (", m_DesiredBufferCount, ") is smaller than the minimal image count supported for this surface (", SurfCapabilities.minImageCount, "). Resetting to ", SurfCapabilities.minImageCount);
-            m_DesiredBufferCount = SurfCapabilities.minImageCount;
+            QGFX_LOG_INFO_MESSAGE("Desired back buffer count (", m_DesiredTextureCount, ") is smaller than the minimal image count supported for this surface (", SurfCapabilities.minImageCount, "). Resetting to ", SurfCapabilities.minImageCount);
+            m_DesiredTextureCount = SurfCapabilities.minImageCount;
         }
-        if (SurfCapabilities.maxImageCount != 0 && m_DesiredBufferCount > SurfCapabilities.maxImageCount)
+        if (SurfCapabilities.maxImageCount != 0 && m_DesiredTextureCount > SurfCapabilities.maxImageCount)
         {
-            QGFX_LOG_INFO_MESSAGE("Desired back buffer count (", m_DesiredBufferCount, ") is greater than the maximal image count supported for this surface (", SurfCapabilities.maxImageCount, "). Resetting to ", SurfCapabilities.maxImageCount);
-            m_DesiredBufferCount = SurfCapabilities.maxImageCount;
+            QGFX_LOG_INFO_MESSAGE("Desired back buffer count (", m_DesiredTextureCount, ") is greater than the maximal image count supported for this surface (", SurfCapabilities.maxImageCount, "). Resetting to ", SurfCapabilities.maxImageCount);
+            m_DesiredTextureCount = SurfCapabilities.maxImageCount;
         }
 
         // We must use m_DesiredBufferCount instead of m_SwapChainDesc.BufferCount, because Vulkan on Android
@@ -465,7 +479,7 @@ namespace Qgfx
         // CreateVulkanSwapChain()          2 -> 4
         // CreateVulkanSwapChain()          4 -> 6
         // CreateVulkanSwapChain()          6 -> 8
-        uint32_t DesiredNumberOfSwapChainImages = m_DesiredBufferCount;
+        uint32_t DesiredNumberOfSwapChainImages = m_DesiredTextureCount;
 
         // Find a supported composite alpha mode - one of these is guaranteed to be set
         vk::CompositeAlphaFlagBitsKHR CompositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
@@ -506,13 +520,13 @@ namespace Qgfx
 
         //DEV_CHECK_ERR(m_SwapChainDesc.Usage != 0, "No swap chain usage flags defined");
         //static_assert(SWAP_CHAIN_USAGE_LAST == SWAP_CHAIN_USAGE_COPY_SOURCE, "Please update this function to handle the new swapchain usage");
-        if (m_Usage & SwapChainUsageFlagBits::RenderTarget)
+        if (m_Usage & SwapChainUsageFlagBits::eRenderAttachment)
             SwapChainCI.imageUsage |= vk::ImageUsageFlagBits::eColorAttachment;
-        if (m_Usage & SwapChainUsageFlagBits::ShaderInput)
+        if (m_Usage & SwapChainUsageFlagBits::eSampled)
             SwapChainCI.imageUsage |= vk::ImageUsageFlagBits::eSampled;
-        if (m_Usage & SwapChainUsageFlagBits::TransferSrc)
+        if (m_Usage & SwapChainUsageFlagBits::eTransferSrc)
             SwapChainCI.imageUsage |= vk::ImageUsageFlagBits::eTransferSrc;
-        if (m_Usage & SwapChainUsageFlagBits::TransferDst)
+        if (m_Usage & SwapChainUsageFlagBits::eTransferDst)
             SwapChainCI.imageUsage |= vk::ImageUsageFlagBits::eTransferDst;
 
         // vkCmdClearColorImage() command requires the image to use VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL layout
@@ -547,26 +561,50 @@ namespace Qgfx
 
         try
         {
-            vk::throwResultException(Dev.getSwapchainImagesKHR(m_VkSwapchain, &m_BufferCount, nullptr, Dispatch), "Failed to get buffer count");
+            vk::throwResultException(Dev.getSwapchainImagesKHR(m_VkSwapchain, &m_TextureCount, nullptr, Dispatch), "Failed to get buffer count");
         }
         catch (const vk::SystemError& Error)
         {
             QGFX_LOG_ERROR_AND_THROW("Failed to request swap chain image count: ", Error.what());
         }
 
-        QGFX_VERIFY_EXPR(m_BufferCount > 0);
+        QGFX_VERIFY_EXPR(m_TextureCount > 0);
 
 
-        if (m_DesiredBufferCount != m_BufferCount)
+        if (m_DesiredTextureCount != m_TextureCount)
         {
-            QGFX_LOG_INFO_MESSAGE("Created swap chain with ", m_BufferCount, " images vs ", m_DesiredBufferCount, " requested.");
+            QGFX_LOG_INFO_MESSAGE("Created swap chain with ", m_TextureCount, " images vs ", m_DesiredTextureCount, " requested.");
         }
 
-        m_bImageAcquired.resize(m_BufferCount);
-        m_ImageAcquiredFences.resize(m_BufferCount);
-        m_SubmitCompleteSemaphores.resize(m_BufferCount);
+        m_bImageAcquired.resize(m_TextureCount);
+        m_ImageAcquiredFences.resize(m_TextureCount);
+        m_SubmitCompleteSemaphores.resize(m_TextureCount);
+        m_FrameTextures.resize(m_TextureCount);
 
-        for (uint32_t i = 0; i < m_BufferCount; ++i)
+        TextureCreateInfo TexCI{};
+        TexCI.Dimension = TextureDimension::e2D;
+        TexCI.Width = m_Width;
+        TexCI.Height = m_Height;
+        TexCI.ArraySize = 1;
+        TexCI.Format = m_TextureFormat;
+        TexCI.MipLevels = 1;
+        TexCI.SampleCount = TextureSampleCount::e1;
+
+        if (m_Usage & SwapChainUsageFlagBits::eRenderAttachment)
+            TexCI.Usage |= TextureUsageFlagBits::eRenderAttachment;
+        if (m_Usage & SwapChainUsageFlagBits::eSampled)
+            TexCI.Usage |= TextureUsageFlagBits::eSampled;
+        if (m_Usage & SwapChainUsageFlagBits::eTransferSrc)
+            TexCI.Usage |= TextureUsageFlagBits::eTransferSrc;
+        if (m_Usage & SwapChainUsageFlagBits::eTransferDst)
+            TexCI.Usage |= TextureUsageFlagBits::eTransferDst;
+
+        TexCI.pInitialQueue = m_spCommandQueue;
+
+        std::vector<vk::Image> m_VkImages(m_TextureCount);
+        vk::throwResultException(Dev.getSwapchainImagesKHR(m_VkSwapchain, &m_TextureCount, m_VkImages.data(), Dispatch), "Failed to retrieve vulkan swapchain images");
+
+        for (uint32_t i = 0; i < m_TextureCount; ++i)
         {
             m_bImageAcquired[i] = false;
 
@@ -583,8 +621,10 @@ namespace Qgfx
             SemaphoreCI.flags = {}; // reserved for future use
 
             m_SubmitCompleteSemaphores[i] = Dev.createSemaphore(SemaphoreCI, nullptr, Dispatch);
+            
+            m_spRenderDevice->CreateTextureFromVkImage(TexCI, m_VkImages[m_TextureCount], &m_FrameTextures[m_TextureCount]);
         }
-        m_SemaphoreIndex = m_BufferCount - 1;
+        m_SemaphoreIndex = m_TextureCount - 1;
 	}
 
     //vk::Result SwapChainVk::AcquireNextImage()
@@ -630,7 +670,7 @@ namespace Qgfx
     //    vk::Fence ImageAcquiredFence = m_SemaphoreChains[m_SemaphoreIndex].AcquireFence;
     //    vk::Semaphore ImageAcquiredSemaphore = m_SemaphoreChains[m_SemaphoreIndex].AcquireSemaphore;
 
-    //    vk::Result Res = m_Swapchain.acquireNextImage(UINT64_MAX, ImageAcquiredSemaphore, ImageAcquiredFence, &m_BackBufferIndex);
+    //    vk::Result Res = m_Swapchain.acquireNextImage(UINT64_MAX, ImageAcquiredSemaphore, ImageAcquiredFence, &m_TextureIndex);
 
     //    m_SemaphoreChains[m_SemaphoreIndex].bAcquired = (Res == vk::Result::eSuccess);
     //    m_SemaphoreChains[m_SemaphoreIndex].CurrentWaitSemaphore = m_SemaphoreChains[m_SemaphoreIndex].AcquireSemaphore;
@@ -640,7 +680,7 @@ namespace Qgfx
     //    //    // Unlike fences or events, the act of waiting for a semaphore also unsignals that semaphore (6.4.2).
     //    //    // Swapchain image may be used as render target or as destination for copy command.
     //    //    pDeviceCtxVk->AddWaitSemaphore(m_ImageAcquiredSemaphores[m_SemaphoreIndex], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT);
-    //    //    if (!m_SwapChainImagesInitialized[m_BackBufferIndex])
+    //    //    if (!m_SwapChainImagesInitialized[m_TextureIndex])
     //    //    {
     //    //        // Vulkan validation layers do not like uninitialized memory.
     //    //        // Clear back buffer first time we acquire it.
@@ -649,7 +689,7 @@ namespace Qgfx
     //    //        ITextureView* pDSV = GetDepthBufferDSV();
     //    //        pDeviceCtxVk->SetRenderTargets(1, &pRTV, pDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     //    //        pDeviceCtxVk->ClearRenderTarget(GetCurrentBackBufferRTV(), nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-    //    //        m_SwapChainImagesInitialized[m_BackBufferIndex] = true;
+    //    //        m_SwapChainImagesInitialized[m_TextureIndex] = true;
     //    //    }
     //    //    pDeviceCtxVk->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_NONE);
     //    //}
@@ -701,6 +741,11 @@ namespace Qgfx
 
         WaitForImageAcquiredFences();
 
+        for (auto Texture : m_FrameTextures)
+        {
+            Texture->Release();
+        }
+
         for (auto Fence : m_ImageAcquiredFences)
         {
             VkDevice.destroyFence(Fence, nullptr, VkDispatch);
@@ -711,6 +756,7 @@ namespace Qgfx
             VkDevice.destroySemaphore(Semaphore, nullptr, VkDispatch);
         }
 
+        m_FrameTextures.clear();
         m_bImageAcquired.clear();
         m_ImageAcquiredFences.clear();
         m_SubmitCompleteSemaphores.clear();

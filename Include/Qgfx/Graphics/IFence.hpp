@@ -10,7 +10,7 @@ namespace Qgfx
 	{
 	public:
 
-		IFence(RefCounter* pRefCounter)
+		IFence(IRefCounter* pRefCounter)
 			: IObject(pRefCounter)
 		{
 		}

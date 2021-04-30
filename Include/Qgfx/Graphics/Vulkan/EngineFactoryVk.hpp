@@ -5,8 +5,12 @@
 #include "../IEngineFactory.hpp"
 #include "../IRenderDevice.hpp"
 
+#include "../../Common/ArrayProxy.hpp"
+
 namespace Qgfx
 {
+	class HardwareQueueVk;
+
 	/**
 	 * @brief Struct describing how to create a new InstanceVk.
 	*/
@@ -31,9 +35,9 @@ namespace Qgfx
 	/**
 	 * @brief Info used to create hardware-level queue.
 	*/
-	struct DeviceQueueInfoVk
+	struct HardwareQueueInfoVk
 	{
-		CommandQueueType QueueType = CommandQueueType::Universal;
+		CommandQueueType QueueType = CommandQueueType::eGeneral;
 		float Priority = 0.0f;
 	};
 
@@ -43,9 +47,6 @@ namespace Qgfx
 	struct RenderDeviceCreateInfoVk : public RenderDeviceCreateInfo
 	{
 		vk::PhysicalDevice PhysicalDeviceVk = {};
-
-		uint32_t NumRequestedQueues = 0;
-		DeviceQueueInfoVk* pRequestedQueues = nullptr;
 	};
 
 	/**
@@ -55,17 +56,17 @@ namespace Qgfx
 	{
 	public:
 
-		EngineFactoryVk(RefCounter* pRefCounter, const EngineFactoryCreateInfoVk& CreateInfo);
+		EngineFactoryVk(IRefCounter* pRefCounter, const EngineFactoryCreateInfoVk& CreateInfo);
 		
 		virtual ~EngineFactoryVk();
 
 		inline virtual const APIInfo& GetAPIInfo() const override { return m_APIInfo; }
 
-		inline virtual GraphicsInstanceType GetType() const override { return GraphicsInstanceType::Vulkan; }
+		inline virtual GraphicsInstanceType GetType() const override { return GraphicsInstanceType::eVulkan; }
 
-		void CreateRenderDevice(const RenderDeviceCreateInfoVk& DeviceCreateInfo, uint32_t* pNumSupportedQueues, IRenderDevice** ppDevice);
+		void CreateRenderDevice(const RenderDeviceCreateInfoVk& DeviceCreateInfo, const ArrayProxy<HardwareQueueInfoVk>& RequestedExtraHardwareQueues, IRenderDevice** ppDevice);
 
-		void CreateCommandQueue(IRenderDevice* pDevice, uint32_t QueueIndex, ICommandQueue** ppContext);
+		void CreateCommandQueue(IRenderDevice* pDevice, HardwareQueueVk* pHardwareQueue, ICommandQueue** ppCommandQueue);
 
 		/**
 		 * @brief Gets a handle to the vkq::Instance object from the quantumvk library, used to interface with the native Vulkan API

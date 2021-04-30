@@ -10,6 +10,6 @@ namespace Qgfx
 		virtual void* Allocate(size_t Size) = 0;
 
 		/// Releases memory
-		virtual void Free(void* Ptr) = 0;
+		virtual void Deallocate(void* Ptr, size_t Size) = 0;
 	};
 }

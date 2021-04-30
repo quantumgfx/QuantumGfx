@@ -1,24 +1,26 @@
 #pragma once
 
 #include "BaseVk.hpp"
+#include "MemAllocVk.hpp"
 #include "EngineFactoryVk.hpp"
 
 #include "../IEngineFactory.hpp"
 #include "../IRenderDevice.hpp"
 
-#include "../../Common/RefAutoPtr.hpp"
+#include "../../Common/RefPtr.hpp"
 
 #include <cstdint>
 
 namespace Qgfx
 {
 	class SwapChainVk;
+	class HardwareQueueVk;
 
 	class RenderDeviceVk final : public IRenderDevice
 	{
 	public:
 
-		RenderDeviceVk(RefCounter* pRefCounter, EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo);
+		RenderDeviceVk(IRefCounter* pRefCounter, EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo, const ArrayProxy<HardwareQueueInfoVk>& RequestedExtraHardwareQueues);
 
 		~RenderDeviceVk();
 
@@ -28,11 +30,17 @@ namespace Qgfx
 
 		inline virtual const DeviceFeatures& GetFeatures() const override { return m_DeviceFeatures; }
 
-		inline uint32_t GetNumSupportedQueues() { return m_NumSupportedQueues; }
-
-		virtual void CreateFence(uint64_t InitialValue, IFence** ppFence) override;
+		// virtual void CreateFence(uint64_t InitialValue, IFence** ppFence) override;
 
 		virtual void WaitIdle() override;
+
+		virtual ICommandQueue* GetDefaultQueue() override { return m_spDefaultCommandQueue; }
+
+		virtual void CreateBuffer(const BufferCreateInfo& CreateInfo, IBuffer** ppBuffer) override;
+
+		virtual void CreateTexture(const TextureCreateInfo& CreateInfo, ITexture** ppTexture) override;
+
+		void CreateTextureFromVkImage(const TextureCreateInfo& CreateInfo, vk::Image VkImage, ITexture** ppTexture);
 
 		///////////////////////////
 		// Native Vk Functions ////
@@ -40,15 +48,11 @@ namespace Qgfx
 
 		// Queues
 
-		vk::Queue GetVkQueue(uint32_t QueueIndex);
+		HardwareQueueVk* GetDefaultHardwareQueue();
 
-		uint32_t GetQueueFamilyIndex(uint32_t QueueIndex);
+		uint32_t GetNumExtraHardwareQueues();
 
-		CommandQueueType GetQueueType(uint32_t QueueIndex);
-
-		void QueueWaitIdle(uint32_t QueueIndex);
-		void QueueSubmit(uint32_t QueueIndex, const vk::SubmitInfo& SubmitInfo, vk::Fence Fence);
-		void QueuePresent(uint32_t QueueIndex, const vk::PresentInfoKHR& PresentInfo);
+		HardwareQueueVk* GetExtraHardwareQueue(uint32_t HardwareQueueIndex);
 
 		// Device
 
@@ -57,6 +61,14 @@ namespace Qgfx
 		vk::Semaphore CreateVkBinarySemaphore() const;
 
 		void DestroyVkSemaphore(vk::Semaphore Sem) const;
+
+		std::pair<vk::Image, VmaAllocation> CreateVkTexture(const vk::ImageCreateInfo& ImageCI, const VmaAllocationCreateInfo& AllocCI);
+
+		void DestroyVkTexture(vk::Image Image, VmaAllocation Allocation) const;
+
+		// Vma Allocator
+
+		inline VmaAllocator GetVmaAllocator() const { return m_VmaAllocator; }
 
 		// Physical Device
 
@@ -72,26 +84,22 @@ namespace Qgfx
 
 	private:
 
-		RefAutoPtr<EngineFactoryVk> m_spEngineFactory;
-
 		vk::DispatchLoaderDynamic m_VkDispatch;
 		vk::PhysicalDevice m_VkPhysicalDevice;
 		vk::Device m_VkDevice;
 
+		VmaAllocator m_VmaAllocator;
+
+		HardwareQueueVk* m_pDefaultHardwareQueue;
+
+		std::vector<HardwareQueueVk*> m_ExtraHardwareQueues;
+
+		RefPtr<EngineFactoryVk> m_spEngineFactory;
+
 		DeviceFeatures m_DeviceFeatures;
 
-		uint32_t m_NumSupportedQueues = 0;
-
-		struct QueueDesc
-		{
-			uint32_t FamilyIndex;
-			uint32_t Index;
-			DeviceQueueInfoVk Info;
-			vk::Queue Handle;
-		};
-
-		std::vector<QueueDesc> m_Queues;
-
 		bool m_bTimelineSemaphoresSupported = false;
+
+		RefPtr<ICommandQueue> m_spDefaultCommandQueue;
 	};
 }

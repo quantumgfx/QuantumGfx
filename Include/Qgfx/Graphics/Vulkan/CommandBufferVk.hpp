@@ -15,7 +15,7 @@ namespace Qgfx
 	{
 	public:
 
-		CommandBufferVk(RefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, CommandQueueVk* pCommandQueue, vk::CommandPool VkCmdPool, vk::CommandBuffer VkCmdBuffer);
+		CommandBufferVk(IRefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, CommandQueueVk* pCommandQueue, vk::CommandPool VkCmdPool, vk::CommandBuffer VkCmdBuffer);
 
 		~CommandBufferVk();
 
@@ -27,8 +27,8 @@ namespace Qgfx
 
 		friend class CommandQueueVk;
 
-		RefAutoPtr<RenderDeviceVk> m_spRenderDevice;
-		RefAutoPtr<CommandQueueVk> m_spCommandQueue;
+		RefPtr<RenderDeviceVk> m_spRenderDevice;
+		RefPtr<CommandQueueVk> m_spCommandQueue;
 
 		vk::CommandPool m_VkCmdPool;
 		vk::CommandBuffer m_VkCmdBuffer;

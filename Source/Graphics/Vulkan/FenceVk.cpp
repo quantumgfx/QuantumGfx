@@ -2,7 +2,7 @@
 
 namespace Qgfx
 {
-	TimelineFenceVk::TimelineFenceVk(RefCounter* pRefCounter, RenderDeviceVk* pDevice, uint64_t InitialValue)
+	TimelineFenceVk::TimelineFenceVk(IRefCounter* pRefCounter, RenderDeviceVk* pDevice, uint64_t InitialValue)
 		: FenceVk(pRefCounter)
 	{
 		m_spRenderDevice = pDevice;

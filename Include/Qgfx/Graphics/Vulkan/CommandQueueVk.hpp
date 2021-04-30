@@ -1,16 +1,18 @@
 #pragma once
 
-#include "../../Common/PoolAllocator.hpp"
-
-#include "../ICommandQueue.hpp"
-
-#include "BaseVk.hpp"
-#include "RenderDeviceVk.hpp"
-
 #include <vector>
 #include <mutex>
 #include <deque>
 #include <queue>
+
+#include "BaseVk.hpp"
+#include "MemAllocVk.hpp"
+#include "RenderDeviceVk.hpp"
+#include "HardwareQueueVk.hpp"
+
+#include "../ICommandQueue.hpp"
+
+#include "../../Common/PoolAllocator.hpp"
 
 namespace Qgfx
 {
@@ -27,7 +29,7 @@ namespace Qgfx
 
 	private:
 
-		RefAutoPtr<RenderDeviceVk> m_spRenderDevice;
+		RefPtr<RenderDeviceVk> m_spRenderDevice;
 
 		std::vector<vk::Fence> m_FencePool;
 	};
@@ -47,7 +49,7 @@ namespace Qgfx
 
 	private:
 
-		RefAutoPtr<RenderDeviceVk> m_spRenderDevice;
+		RefPtr<RenderDeviceVk> m_spRenderDevice;
 
 		std::vector<vk::Semaphore> m_SemaphorePool;
 
@@ -58,11 +60,11 @@ namespace Qgfx
 	{
 	public:
 
-		CommandQueueVk(RefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, uint32_t QueueIndex);
+		CommandQueueVk(IRefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, HardwareQueueVk* pHardwareQueue, bool bIsDefaultQueue);
 
 		~CommandQueueVk();
 
-		virtual CommandQueueType GetType() const override { return m_QueueType; }
+		virtual CommandQueueType GetType() const override { return m_pHardwareQueue->GetQueueType(); }
 
 		virtual void CreateCommandBuffer(ICommandBuffer** ppCommandBuffer) override;
 
@@ -90,9 +92,20 @@ namespace Qgfx
 
 		void RecycleAcquireSemaphoreOnceUnused();*/
 
+		void DeleteTextureWhenUnused(vk::Image Image, VmaAllocation Allocation);
+
 	private:
 
 		void CheckPendingSubmissions(bool bForceWaitIdle);
+
+	private:
+
+		// Strong reference to device. Used by non default queues to keep device alive.
+		RefPtr<RenderDeviceVk> m_spRenderDevice;
+
+		RenderDeviceVk* const m_pRenderDevice;
+
+		HardwareQueueVk* const m_pHardwareQueue;
 
 		struct CommandPoolAndBuffer
 		{
@@ -137,11 +150,18 @@ namespace Qgfx
 
 		std::deque<SemaphoreToDelete> m_SemaphoresToDelete;
 
+		struct TextureToDelete
+		{
+			uint32_t Index;
+			vk::Image Image;
+			VmaAllocation Allocation;
+		};
+
+		std::deque<TextureToDelete> m_TexturesToDelete;
+
 		//////////////////////////
 		// Handles ///////////////
 		//////////////////////////
-
-		RefAutoPtr<RenderDeviceVk> m_spRenderDevice;
 
 		std::mutex m_Mutex;
 
@@ -154,10 +174,6 @@ namespace Qgfx
 		//////////////////////////
 		// Basic Settings ////////
 		//////////////////////////
-
-		CommandQueueType m_QueueType;
-
-		uint32_t m_QueueIndex;
 
 	};
 }

@@ -15,7 +15,7 @@ namespace Qgfx
 	{
 	public:
 
-		ICommandBuffer(RefCounter* pRefCounter)
+		ICommandBuffer(IRefCounter* pRefCounter)
 			: IObject(pRefCounter)
 		{
 		}

@@ -77,7 +77,7 @@ set(QGFX_INCLUDE_FILES
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/MemoryAllocator.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/PoolAllocator.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/SpinLock.hpp
-        ${QGFX_INCLUDE_DIR}/Qgfx/Common/RefAutoPtr.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/RefPtr.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/RefCountedObject.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/ValidatedCast.hpp
         # Platform Include Files
@@ -89,20 +89,28 @@ set(QGFX_INCLUDE_FILES
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Forward.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/GraphicsTypes.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IBuffer.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IBufferView.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ICommandBuffer.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ICommandQueue.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IComputePipeline.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IEngineFactory.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IFence.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IGraphicsPipeline.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IObject.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IPipeline.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IRenderDevice.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ISampler.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IShaderModule.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ISwapChain.hpp
-        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ITexture.hpp)
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ITexture.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/ITextureView.hpp)
 
 set(QGFX_SOURCE_FILES
         # Common Implementation
         ${QGFX_SOURCE_DIR}/Common/DebugOutput.cpp
-        ${QGFX_SOURCE_DIR}/Common/SpinLock.cpp)
+        ${QGFX_SOURCE_DIR}/Common/SpinLock.cpp
+        # Graphics Implementation
+        ${QGFX_SOURCE_DIR}/Graphics/ITexture.cpp)
 
 if(${QGFX_PLATFORM_WIN32})
     # PLATFORM_WIN32 specific
@@ -125,24 +133,37 @@ if(${QGFX_VULKAN_SUPPORTED})
 
     find_package(Vulkan REQUIRED)
     target_include_directories(Qgfx PUBLIC ${Vulkan_INCLUDE_DIR})
+    target_include_directories(Qgfx PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/ThirdParty/VulkanMemoryAllocator/src)
 
     set(QGFX_INCLUDE_FILES ${QGFX_INCLUDE_FILES}
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/BaseVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/BufferViewVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/BufferVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/CommandBufferVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/CommandQueueVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/EngineFactoryVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/FenceVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/HardwareQueueVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/MemAllocVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/RenderDeviceVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/SwapChainVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/TextureViewVk.hpp
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/TextureVk.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/TypeConversionsVk.hpp)
 
-    set(QGFX_SOURCE_FILES ${QGFX_SOURCE_FILES} 
+    set(QGFX_SOURCE_FILES ${QGFX_SOURCE_FILES}
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/BufferViewVk.cpp
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/BufferVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/CommandBufferVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/CommandQueueVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/EngineFactoryVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/FenceVk.cpp
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/HardwareQueueVk.cpp
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/MemAllocVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/RenderDeviceVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/SwapChainVk.cpp
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/TextureViewVk.cpp
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/TextureVk.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/TypeConversionsVk.cpp)
 
     target_compile_definitions(Qgfx PUBLIC QGFX_VULKAN_SUPPORTED=1)

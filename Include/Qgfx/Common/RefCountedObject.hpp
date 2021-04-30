@@ -15,25 +15,14 @@ namespace Qgfx
 	class RefCountedObject;
 
 	/**
-	 * @brief Represents a RefCountedAllocation block. In order to minimize fragmentation and memory allocation, both the RefCounter
-	 * and the managed object are allocated together. This represents that allocation
-	*/
-	class IRefCountedAllocation
-	{
-	public:
-
-		virtual RefCountedObject* GetManagedObject() = 0;
-		virtual RefCountedObject* GetOwnerObject() = 0;
-		virtual void DestructObject() = 0;
-		virtual void FreeSelf() = 0;
-	};
-
-	/**
 	 * @brief Manages the references counts of an object, and allows for weak references (contrary to standard intrusive ref implementations).
 	*/
-	class RefCounter
+	class IRefCounter
 	{
 	public:
+
+		virtual RefCountedObject* GetManagedObject() const = 0;
+		virtual RefCountedObject* GetOwningObject() const = 0;
 
 		inline Atomics::Long AddStrongRef()
 		{
@@ -94,7 +83,7 @@ namespace Qgfx
 				// If we do not unlock it, this->m_LockFlag will expire,
 				// which will cause Lock.~LockHelper() to crash.
 				Lock.Unlock();
-				m_pAllocation->FreeSelf();
+				FreeSelf();
 			}
 			return NumWeakReferences;
 		}
@@ -141,7 +130,7 @@ namespace Qgfx
 
 			if (m_ObjectState == ObjectState::Alive && StrongRefCnt > 1)
 			{
-				*ppObject = m_pAllocation->GetManagedObject();
+				*ppObject = GetManagedObject();
 			}
 
 			if (*ppObject == nullptr)
@@ -162,17 +151,19 @@ namespace Qgfx
 
 	private:
 
+		virtual void DestructObject() = 0;
+		virtual void FreeSelf() = 0;
+
 		template<typename ObjectType, typename AllocatorType>
 		friend class RefCountedAllocationImpl;
 
-		RefCounter(IRefCountedAllocation* pOwningAllocation) noexcept
-			: m_pAllocation(pOwningAllocation)
+		IRefCounter() noexcept
 		{
 			m_lNumStrongReferences = 0;
 			m_lNumWeakReferences = 0;
 		}
 
-		~RefCounter() = default;
+		~IRefCounter() = default;
 
 		void TryDestroyObject()
 		{
@@ -250,16 +241,16 @@ namespace Qgfx
 				Lock.Unlock();
 
 				// Call the attached object's destructor
-				m_pAllocation->DestructObject();
+				DestructObject();
 
 				// Note that <this> may be destroyed here already,
 				// see comments in ~ControlledObjectType()
 				if (bDestroyThis) // Free the object, its memory, and this reference counter.
-					m_pAllocation->FreeSelf();
+					FreeSelf();
 			}
 		}
 
-		IRefCountedAllocation* m_pAllocation;
+		// IRefCountedAllocation* m_pAllocation;
 
 		Atomics::AtomicLong m_lNumStrongReferences;
 		Atomics::AtomicLong m_lNumWeakReferences;
@@ -280,7 +271,7 @@ namespace Qgfx
 	{
 	public:
 
-		RefCountedObject(RefCounter* pRefCounter)
+		RefCountedObject(IRefCounter* pRefCounter)
 			: m_pRefCounter(pRefCounter)
 		{
 		}
@@ -299,59 +290,55 @@ namespace Qgfx
 			m_pRefCounter->ReleaseStrongRef();
 		}
 
-		inline RefCounter* GetRefCounter()
+		inline IRefCounter* GetRefCounter()
 		{
 			return m_pRefCounter;
 		}
 
 	private:
 
-		RefCounter* m_pRefCounter;
+		IRefCounter* m_pRefCounter;
 	};
 
 	template<typename ObjectType, typename AllocatorType>
-	class RefCountedAllocation final : public IRefCountedAllocation
+	class RefCounterImpl final : public IRefCounter
 	{
 	public:
 
-		virtual RefCountedObject* GetManagedObject() override final
+		virtual RefCountedObject* GetManagedObject() const override final
 		{
-			return static_cast<RefCountedObject*>(ObjectPtr());
+			return ObjectPtr();
 		}
 
-		virtual RefCountedObject* GetOwnerObject() override final
+		virtual RefCountedObject* GetOwnerObject() const override final
 		{
 			return m_pOwner;
 		}
 
+	private:
+
 		virtual void DestructObject() override final
 		{
-			ObjectPtr()->~ObjectType();
+			ObjectPtr()->ObjectType::~ObjectType();
 		}
 
 		virtual void FreeSelf() override final
 		{
 			// Call RefCounter's destructor
-			RefCounterPtr()->~RefCounter();
+			this->IRefCounter::~IRefCounter();
 
 			if (m_pAllocator)
-				m_pAllocator->Free(this);
+				m_pAllocator->Deallocate(this, sizeof(RefCounterImpl));
 			else
 				delete[] reinterpret_cast<uint8_t*>(this);
 		}
 
-	private:
-
-		RefCountedAllocation(AllocatorType* pAllocator, RefCountedObject* pOwner)
-			: m_pAllocator{ pAllocator }, m_pOwner{pOwner}
+		ObjectType* ObjectPtr() const
 		{
+			return reinterpret_cast<ObjectType*>(m_ObjectStorage);
 		}
 
-		inline ObjectType* ObjectPtr() const { return reinterpret_cast<ObjectType*>(m_ObjectStorage); }
-		inline RefCounter* RefCounterPtr() const { return reinterpret_cast<RefCounter*>(m_RefCounterStorage); }
-
 		alignas(ObjectType) uint8_t m_ObjectStorage[sizeof(ObjectType)];
-		alignas(RefCounter) uint8_t m_RefCounterStorage[sizeof(RefCounter)];
 		AllocatorType* m_pAllocator;
 		RefCountedObject* m_pOwner;
 
@@ -360,21 +347,24 @@ namespace Qgfx
 		template<typename ObjectType, typename AllocatorType>
 		friend class MakeRefCountedObj;
 
-		template<typename ... CtorArgTypes>
-		static RefCountedAllocation* Create(AllocatorType* pAllocator, RefCountedObject* pOwner, CtorArgTypes&& ... CtorArgs)
+		RefCounterImpl(AllocatorType* pAllocator, RefCountedObject* pOwner)
+			: m_pAllocator{ pAllocator }, m_pOwner{ pOwner }
 		{
-			RefCountedAllocation* Alloc;
-			if (pAllocator)
-				Alloc = reinterpret_cast<RefCountedAllocation*>(pAllocator->Allocate(sizeof(RefCountedAllocation)));
-			else
-				Alloc = reinterpret_cast<RefCountedAllocation*>(new uint8_t[sizeof(RefCountedAllocation)]);
-
-			new(Alloc) RefCountedAllocation(pAllocator, pOwner);
-			new (Alloc->RefCounterPtr()) RefCounter(Alloc);
-			new (Alloc->ObjectPtr()) ObjectType(RefCounterPtr(), std::forward<CtorArgTypes>(CtorArgs)...);
-
-			Alloc->ObjectPtr()->AddRef();
 		}
+
+		static RefCounterImpl* Create(AllocatorType* pAllocator, RefCountedObject* pOwner)
+		{
+			RefCounterImpl* pRefCounter;
+			if (pAllocator)
+				pRefCounter = reinterpret_cast<RefCounterImpl*>(pAllocator->Allocate(sizeof(RefCounterImpl)));
+			else
+				pRefCounter = reinterpret_cast<RefCounterImpl*>(new uint8_t[sizeof(RefCounterImpl)]);
+
+			new(pRefCounter) RefCounterImpl(pAllocator, pOwner);
+
+			return pRefCounter;
+		}
+
 	};
 
 	/**
@@ -386,8 +376,6 @@ namespace Qgfx
 	class MakeRefCountedObj
 	{
 	public:
-
-		using RefCountedAllocationType = RefCountedAllocation<ObjectType, AllocatorType>;
 
 		explicit MakeRefCountedObj()
 			: m_pAllocator(nullptr)
@@ -402,9 +390,13 @@ namespace Qgfx
 		template<typename ... CtorArgTypes>
 		ObjectType* operator() (CtorArgTypes&& ... CtorArgs)
 		{
-			RefCountedAllocationType* Alloc = RefCountedAllocationType::Create(m_pAllocator, m_pOwner, std::forward<CtorArgTypes>(CtorArgs));
+			RefCounterImpl<ObjectType, AllocatorType>* pRefCounter = RefCounterImpl<ObjectType, AllocatorType>::Create(m_pAllocator, m_pOwner);
 
-			return Alloc->ObjectPtr();
+			new (pRefCounter->ObjectPtr()) ObjectType(pRefCounter, std::forward<CtorArgTypes>(CtorArgs)...);
+
+			pRefCounter->AddStrongRef();
+
+			return pRefCounter->ObjectPtr();
 		}
 
 	private:

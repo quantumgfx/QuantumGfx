@@ -19,7 +19,7 @@ namespace Qgfx
 	{
 	public:
 
-		FenceVk(RefCounter* pRefCounter)
+		FenceVk(IRefCounter* pRefCounter)
 			: IFence(pRefCounter)
 		{
 		}
@@ -33,7 +33,7 @@ namespace Qgfx
 	{
 	public:
 
-		TimelineFenceVk(RefCounter* pRefCounter, RenderDeviceVk* pDevice, uint64_t InitialValue);
+		TimelineFenceVk(IRefCounter* pRefCounter, RenderDeviceVk* pDevice, uint64_t InitialValue);
 
 		~TimelineFenceVk();
 
@@ -47,7 +47,7 @@ namespace Qgfx
 
 	private:
 
-		RefAutoPtr<RenderDeviceVk> m_spRenderDevice;
+		RefPtr<RenderDeviceVk> m_spRenderDevice;
 		vk::Semaphore m_VkSemaphore;
 	};
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Object.hpp"
+#include "RefCountedObject.hpp"
 #include "ValidatedCast.hpp"
 
 #include <type_traits>
@@ -9,22 +9,22 @@
 namespace Qgfx
 {
 	template<typename T>
-	class RefAutoPtr
+	class RefPtr
 	{
-        static_assert(std::is_base_of<IObject, T>::value, "T must extend Qgfx::IObject to be used in Qgfx::RefAutoPtr");
+        static_assert(std::is_base_of<IObject, T>::value, "T must extend Qgfx::IObject to be used in Qgfx::RefPtr");
 
 	public:
 
-        RefAutoPtr() noexcept {}
+        RefPtr() noexcept {}
 
-        explicit RefAutoPtr(T* pObj) noexcept 
+        explicit RefPtr(T* pObj) noexcept 
             : m_pObject{ pObj }
         {
             if (m_pObject)
                 m_pObject->AddRef();
         }
 
-        RefAutoPtr(const RefAutoPtr& Other) noexcept 
+        RefPtr(const RefPtr& Other) noexcept 
             : m_pObject{ Other.m_pObject }
         {
             if (m_pObject)
@@ -32,12 +32,12 @@ namespace Qgfx
         }
 
         template <typename DerivedType, typename = typename std::enable_if<std::is_base_of<T, DerivedType>::value>::type>
-        RefAutoPtr(const RefAutoPtr<DerivedType>& Other) noexcept 
-            : RefAutoPtr<T>{ Other.m_pObject }
+        RefPtr(const RefPtr<DerivedType>& Other) noexcept 
+            : RefPtr<T>{ Other.m_pObject }
         {
         }
 
-        RefAutoPtr(RefAutoPtr&& Other) noexcept :
+        RefPtr(RefPtr&& Other) noexcept :
             m_pObject{ std::move(Other.m_pObject) }
         {
             //Make sure original pointer has no references to the object
@@ -45,14 +45,14 @@ namespace Qgfx
         }
 
         template <typename DerivedType, typename = typename std::enable_if<std::is_base_of<T, DerivedType>::value>::type>
-        RefAutoPtr(RefAutoPtr<DerivedType>&& Other) noexcept
+        RefPtr(RefPtr<DerivedType>&& Other) noexcept
             : m_pObject{ std::move(Other.m_pObject) }
         {
             //Make sure original pointer has no references to the object
             Other.m_pObject = nullptr;
         }
 
-        ~RefAutoPtr()
+        ~RefPtr()
         {
             Reset();
         }
@@ -79,7 +79,7 @@ namespace Qgfx
             }
         }
 
-        RefAutoPtr& operator=(T* pObj) noexcept
+        RefPtr& operator=(T* pObj) noexcept
         {
             if (m_pObject != pObj)
             {
@@ -92,18 +92,18 @@ namespace Qgfx
             return *this;
         }
 
-        RefAutoPtr& operator=(const RefAutoPtr& Other) noexcept
+        RefPtr& operator=(const RefPtr& Other) noexcept
         {
             return *this = Other.m_pObject;
         }
 
         template <typename DerivedType, typename = typename std::enable_if<std::is_base_of<T, DerivedType>::value>::type>
-        RefAutoPtr& operator=(const RefAutoPtr<DerivedType>& Other) noexcept
+        RefPtr& operator=(const RefPtr<DerivedType>& Other) noexcept
         {
             return *this = static_cast<T*>(Other.m_pObject);
         }
 
-        RefAutoPtr& operator=(RefAutoPtr&& Other) noexcept
+        RefPtr& operator=(RefPtr&& Other) noexcept
         {
             if (m_pObject != Other.m_pObject)
                 Attach(Other.Detach());
@@ -112,7 +112,7 @@ namespace Qgfx
         }
 
         template <typename DerivedType, typename = typename std::enable_if<std::is_base_of<T, DerivedType>::value>::type>
-        RefAutoPtr& operator=(RefAutoPtr<DerivedType>&& Other) noexcept
+        RefPtr& operator=(RefPtr<DerivedType>&& Other) noexcept
         {
             if (m_pObject != Other.m_pObject)
                 Attach(Other.Detach());
@@ -122,8 +122,8 @@ namespace Qgfx
         
         bool operator!() const noexcept { return m_pObject == nullptr; }
         explicit operator bool() const noexcept { return m_pObject != nullptr; }
-        bool operator==(const RefAutoPtr& Other) const noexcept { return m_pObject == Other.m_pObject; }
-        bool operator!=(const RefAutoPtr& Other) const noexcept { return m_pObject != Other.m_pObject; }
+        bool operator==(const RefPtr& Other) const noexcept { return m_pObject == Other.m_pObject; }
+        bool operator!=(const RefPtr& Other) const noexcept { return m_pObject != Other.m_pObject; }
 
 
         T& operator*() noexcept { return *m_pObject; }
@@ -157,27 +157,27 @@ namespace Qgfx
         const DstType** RawDblPtr() const noexcept { return &ValidatedCast<DstType*>(m_pObject); }
 
         template<typename DstType>
-        DstType* As() noexcept { return ValidatedCast<DstType*>(m_pObject); }
+        DstType* Raw() noexcept { return ValidatedCast<DstType*>(m_pObject); }
 
         template<typename DstType>
-        const DstType* As() const noexcept { return ValidatedCast<DstType*>(m_pObject); }
+        const DstType* Raw() const noexcept { return ValidatedCast<DstType*>(m_pObject); }
 
 	private:
 
 		template <typename OtherType>
-		friend class RefAutoPtr;
+		friend class RefPtr;
 
 		T* m_pObject = nullptr;
 	};
 
     template <typename T>
-    class RefWeakPtr
+    class WeakPtr
     {
 
-        static_assert(std::is_base_of<IObject, T>::value, "T must extend Qgfx::IObject to be used in Qgfx::RefWeakPtr");
+        static_assert(std::is_base_of<IObject, T>::value, "T must extend Qgfx::IObject to be used in Qgfx::WeakPtr");
 
     public:
-        explicit RefWeakPtr(T* pObj = nullptr) noexcept 
+        explicit WeakPtr(T* pObj = nullptr) noexcept 
             : m_pRefCounter{ nullptr }
         {
             if (pObj)
@@ -187,26 +187,26 @@ namespace Qgfx
             }
         }
 
-        RefWeakPtr(const RefWeakPtr& Other) noexcept
+        WeakPtr(const WeakPtr& Other) noexcept
             : m_pRefCounter{ Other.m_pRefCounter }
         {
             if (m_pRefCounter)
                 m_pRefCounter->AddWeakRef();
         }
 
-        RefWeakPtr(RefWeakPtr&& Other) noexcept
+        WeakPtr(WeakPtr&& Other) noexcept
             : m_pRefCounter{ std::move(Other.m_pRefCounter) }
         {
             Other.m_pRefCounter = nullptr;
         }
 
 
-        ~RefWeakPtr()
+        ~WeakPtr()
         {
             Reset();
         }
 
-        RefWeakPtr& operator=(T* pObj) noexcept
+        WeakPtr& operator=(T* pObj) noexcept
         {
             Reset();
             if (pObj)
@@ -217,7 +217,7 @@ namespace Qgfx
             return *this;
         }
 
-        RefWeakPtr& operator=(const RefWeakPtr& Other) noexcept
+        WeakPtr& operator=(const WeakPtr& Other) noexcept
         {
             if (*this == Other)
                 return *this;
@@ -229,7 +229,7 @@ namespace Qgfx
             return *this;
         }
 
-        RefWeakPtr& operator=(RefWeakPtr&& Other) noexcept
+        WeakPtr& operator=(WeakPtr&& Other) noexcept
         {
             if (*this == Other)
                 return *this;
@@ -256,9 +256,9 @@ namespace Qgfx
         }
 
         /// Obtains a strong reference to the object
-        RefAutoPtr<T> Lock()
+        RefPtr<T> Lock()
         {
-            RefAutoPtr<T> spObj;
+            RefPtr<T> spObj;
             if (m_pRefCounter)
             {
                 m_pRefCounter->GetObject(&spObj);
@@ -266,11 +266,11 @@ namespace Qgfx
             return spObj;
         }
 
-        bool operator==(const RefWeakPtr& Ptr) const noexcept { return m_pRefCounter == Ptr.m_pRefCounter; }
-        bool operator!=(const RefWeakPtr& Ptr) const noexcept { return m_pRefCounter != Ptr.m_pRefCounter; }
+        bool operator==(const WeakPtr& Ptr) const noexcept { return m_pRefCounter == Ptr.m_pRefCounter; }
+        bool operator!=(const WeakPtr& Ptr) const noexcept { return m_pRefCounter != Ptr.m_pRefCounter; }
 
     protected:
 
-        RefCounter* m_pRefCounter;
+        IRefCounter* m_pRefCounter;
     };
 }

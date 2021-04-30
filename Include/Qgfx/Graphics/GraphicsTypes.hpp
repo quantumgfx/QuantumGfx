@@ -17,202 +17,112 @@ namespace Qgfx
 
     enum class GraphicsInstanceType
     {
-        Vulkan = 1,
+        eVulkan = 1,
     };
 
-    enum class BufferMemoryType
-    {
-        /**
-         * @brief A resource that can only be read by the GPU. It cannot be written by the GPU, and can not be accessed at all by the CPU. \n
-         * Static buffers do not allow CPU access and must use CPUAccess::None.
-        */
-        Immutable = 0,
-        Default,
-        Dynamic,
-        Staging,
-        Unified,
-    };
+    //enum class ImageMemoryType
+    //{
+    //    /**
+    //     * @brief A resource that can only be read by the GPU. It cannot be written by the GPU, and can not be accessed at all by the CPU. \n
+    //     * Static buffers do not allow CPU access and must use CPUAccess::None.
+    //    */
+    //    Immutable = 0,
+    //    Default,
+    //    Dynamic,
+    //    Staging,
+    //    Unified,
+    //};
 
-    enum class BufferState
+    enum class CompareFunc
     {
-        Vertex = 0,
-        Uniform,
-        Index,
-        Indirect,
-        ShaderResource,
-        UnorderedAccess,
-        TransferDst,
-        TransferSrc
-    };
-
-    enum class BufferUsageFlagBits
-    {
-        None = 0x000,
-        Vertex = 0x001,
-        Uniform = 0x002,
-        Index = 0x004,
-        Indirect = 0x008,
-        ShaderResource = 0x010,
-        UnorderedAccess = 0x020,
-        TransferSrc = 0x040,
-        TransferDst = 0x080,
-        MapRead = 0x100,
-        MapWrite = 0x100
-    };
-
-    template<>
-    struct EnableEnumFlags<BufferUsageFlagBits>
-    {
-        static const bool bEnabled = true;
-    };
-
-    using BufferUsageFlags = Flags<BufferUsageFlagBits>;
-
-    enum class ImageMemoryType
-    {
-        /**
-         * @brief A resource that can only be read by the GPU. It cannot be written by the GPU, and can not be accessed at all by the CPU. \n
-         * Static buffers do not allow CPU access and must use CPUAccess::None.
-        */
-        Immutable = 0,
-        Default,
-        Dynamic,
-        Staging,
-        Unified,
-    };
-
-    enum class ImageState
-    {
-        RenderAttachment,
-        DepthReadOnlyAttachment,
-        DepthAttachment,
-        ShaderResource,
-        UnorderedAccess,
-        TransferDst,
-        TransferSrc,
-        Present,
+        eNever = 0,
+        eLess,
+        eEqual,
+        eLessEqual,
+        eGreater,
+        eGreaterEqual,
+        eNotEqual,
+        eAlways
     };
 
     enum class TextureFormat
     {
         // 8-bit formats
-        R8Unorm = 1,
-        R8Snorm,
-        R8Uint,
-        R8Sint,
+        eR8Unorm = 1,
+        eR8Snorm,
+        eR8Uint,
+        eR8Sint,
 
         // 16-bit formats
-        R16Float,
-        R16Unorm,
-        R16Snorm,
-        R16Uint,
-        R16Sint,
+        eR16Float,
+        eR16Unorm,
+        eR16Snorm,
+        eR16Uint,
+        eR16Sint,
 
-        RG8Unorm,
-        RG8Snorm,
-        RG8Uint,
-        RG8Sint,
+        eRG8Unorm,
+        eRG8Snorm,
+        eRG8Uint,
+        eRG8Sint,
 
         // 32-bit formats
-        R32Float,
-        R32Uint,
-        R32Sint,
+        eR32Float,
+        eR32Uint,
+        eR32Sint,
 
-        RG16Float,
-        RG16Unorm,
-        RG16Snorm,
-        RG16Uint,
-        RG16Sint,
-        RGBA8Unorm,
-        RGBA8Snorm,
-        RGBA8Uint,
-        RGBA8Sint,
-        RGBA8UnormSrgb,
+        eRG16Float,
+        eRG16Unorm,
+        eRG16Snorm,
+        eRG16Uint,
+        eRG16Sint,
+        eRGBA8Unorm,
+        eRGBA8Snorm,
+        eRGBA8Uint,
+        eRGBA8Sint,
+        eRGBA8UnormSrgb,
 
-        BGRA8Unorm,
-        BGRA8UnormSrgb,
+        eBGRA8Unorm,
+        eBGRA8UnormSrgb,
         // Packed 32-bit formats
-        RGB10A2Unorm,
-        RGB10A2Uint,
-        R11G11B10Float,
+        eRGB10A2Unorm,
+        eRGB10A2Uint,
+        eR11G11B10Float,
 
         // 64-bit formats
-        RG32Float,
-        RG32Uint,
-        RG32Sint,
+        eRG32Float,
+        eRG32Uint,
+        eRG32Sint,
 
-        RGBA16Float,
-        RGBA16Uint,
-        RGBA16Sint,
+        eRGBA16Float,
+        eRGBA16Uint,
+        eRGBA16Sint,
 
         // 128-bit formats
-        RGBA32Float,
-        RGBA32Uint,
-        RGBA32Sint,
+        eRGBA32Float,
+        eRGBA32Uint,
+        eRGBA32Sint,
        
         // Depth and stencil formats
-        Stencil8Uint,            // Might be implemented as real Stencil8Uint or Depth24PlusStencil8Uint if that is not available.
-        Depth16Unorm, 
-        Depth24Plus,             // Might be implemented as Depth24Unorm or Depth32Float
-        Depth24PlusStencil8Uint, // Might be implemented as Depth24UnormStencil8Uint or Depth32FloatStencil8Uint32
-        Depth32Float,
+        eStencil8Uint,            // Might be implemented as real Stencil8Uint or Depth24PlusStencil8Uint if that is not available.
+        eDepth16Unorm, 
+        eDepth24Plus,             // Might be implemented as Depth24Unorm or Depth32Float
+        eDepth24PlusStencil8Uint, // Might be implemented as Depth24UnormStencil8Uint or Depth32FloatStencil8Uint32
+        eDepth32Float,
         // Optional depth and stencil formats
-        Depth16UnormStencil8Uint,
-        Depth32FloatStencil8Uint,
-    };
-
-    enum class SwapChainUsageFlagBits
-    {
-        None = 0x00,
-        RenderTarget = 0x01,
-        ShaderInput = 0x02,
-        TransferSrc = 0x04,
-        TransferDst = 0x08
-    };
-
-    using SwapChainUsageFlags = Flags<SwapChainUsageFlagBits>;
-
-    /// The transform applied to the image content prior to presentation.
-    enum class SurfaceTransform
-    {
-        /// Uset the most optimal surface transform.
-        Optimal = 0,
-
-        /// The image content is presented without being transformed.
-        Identity,
-
-        /// The image content is rotated 90 degrees clockwise.
-        Rotate90,
-
-        /// The image content is rotated 180 degrees clockwise.
-        Rotate180,
-
-        /// The image content is rotated 270 degrees clockwise.
-        Rotate270,
-
-        /// The image content is mirrored horizontally.
-        HorizontalMirror,
-
-        /// The image content is mirrored horizontally, then rotated 90 degrees clockwise.
-        HorizontalMirrorRotate90,
-
-        /// The  image content is mirrored horizontally, then rotated 180 degrees clockwise.
-        HorizontalMirrorRotate180,
-
-        /// The  image content is mirrored horizontally, then rotated 270 degrees clockwise.
-        HorizontalMirrorRotate270,
+        eDepth16UnormStencil8Uint,
+        eDepth32FloatStencil8Uint,
     };
 
     enum class Filter
     {
-        Nearest = 0,
-        Linear,
+        eNearest = 0,
+        eLinear,
     };
 
     enum class MipMode
     {
-        Nearest = 0,
-        Linear,
+        eNearest = 0,
+        eLinear,
     };
 
     /**
@@ -220,14 +130,14 @@ namespace Qgfx
     */
     enum class CompareOp
     {
-        Never = 0,
-        Less,
-        Equal,
-        LessOrEqual,
-        Greater,
-        NotEqual,
-        GreaterOrEqual,
-        Always,
+        eNever = 0,
+        eLess,
+        eEqual,
+        eLessOrEqual,
+        eGreater,
+        eNotEqual,
+        eGreaterOrEqual,
+        eAlways,
     };
 
     /**
@@ -235,10 +145,10 @@ namespace Qgfx
     */
     enum class TextureAddressMode
     {
-        Wrap,
-        Mirror,
-        Clamp,
-        Border,
+        eWrap,
+        eMirror,
+        eClamp,
+        eBorder,
     };
 
     enum class CommandQueueType
@@ -246,15 +156,15 @@ namespace Qgfx
         /**
          * @brief General queues support presentation, graphics commands, compute commands, and transfer commands.
         */
-        General = 0,
+        eGeneral = 0,
         /**
          * @brief Compute queues support compute commands and transfer commands
         */
-        Compute,
+        eCompute,
         /**
          * @brief Transfer queues only support transfer commands
         */
-        Transfer,
+        eTransfer,
     };
 
     /////////////////////////
@@ -263,18 +173,18 @@ namespace Qgfx
 
     enum class DeviceFeatureState
     {
-        Disabled = 0,
-        Enabled,
-        Optional
+        eDisabled = 0,
+        eEnabled,
+        eOptional
     };
 
     struct DeviceFeatures
     {
-        DeviceFeatureState ComputeShaders = DeviceFeatureState::Disabled;
-        DeviceFeatureState TesselationShaders = DeviceFeatureState::Disabled;
-        DeviceFeatureState GeometryShaders = DeviceFeatureState::Disabled;
-        DeviceFeatureState IndirectRendering = DeviceFeatureState::Disabled;
-        DeviceFeatureState WireFrameFill = DeviceFeatureState::Disabled;
+        DeviceFeatureState ComputeShaders = DeviceFeatureState::eDisabled;
+        DeviceFeatureState TesselationShaders = DeviceFeatureState::eDisabled;
+        DeviceFeatureState GeometryShaders = DeviceFeatureState::eDisabled;
+        DeviceFeatureState IndirectRendering = DeviceFeatureState::eDisabled;
+        DeviceFeatureState WireFrameFill = DeviceFeatureState::eDisabled;
     };
 
     struct APIInfo
@@ -285,5 +195,12 @@ namespace Qgfx
     struct RenderDeviceCreateInfo
     {
         DeviceFeatures Features;
+    };
+
+    struct Extent3D
+    {
+        uint32_t Width;
+        uint32_t Height;
+        uint32_t Depth;
     };
 }

@@ -2,7 +2,7 @@
 
 namespace Qgfx
 {
-	CommandBufferVk::CommandBufferVk(RefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, CommandQueueVk* pCommandQueue, vk::CommandPool VkCmdPool, vk::CommandBuffer VkCmdBuffer)
+	CommandBufferVk::CommandBufferVk(IRefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, CommandQueueVk* pCommandQueue, vk::CommandPool VkCmdPool, vk::CommandBuffer VkCmdBuffer)
 		: ICommandBuffer(pRefCounter)
 	{
 		m_State = CommandBufferState::Recording;

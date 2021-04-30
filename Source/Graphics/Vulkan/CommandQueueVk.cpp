@@ -96,28 +96,18 @@ namespace Qgfx
 		m_SemaphorePool.push_back(SemaphoreVk);
 	}
 
-	CommandQueueVk::CommandQueueVk(RefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, uint32_t QueueIndex)
-		: ICommandQueue(pRefCounter), m_FencePool(pRenderDevice), m_AcquiredSemaphorePool(pRenderDevice)
+	CommandQueueVk::CommandQueueVk(IRefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, HardwareQueueVk* pHardwareQueue, bool bIsDefaultQueue)
+		: ICommandQueue(pRefCounter), m_pRenderDevice(pRenderDevice), m_pHardwareQueue(pHardwareQueue), m_FencePool(pRenderDevice), m_AcquiredSemaphorePool(pRenderDevice)
 	{
-		m_spRenderDevice = pRenderDevice;
-		m_QueueIndex = QueueIndex;
-		m_QueueType = pRenderDevice->GetQueueType(QueueIndex);
-
-		vk::CommandPoolCreateInfo CommandPoolCI{};
-		CommandPoolCI.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-		CommandPoolCI.pNext = nullptr;
-		CommandPoolCI.queueFamilyIndex = pRenderDevice->GetQueueFamilyIndex(QueueIndex);
-
-		//m_DefaultCommandPool = vkq::CommandPool::create(pRenderDevice->GetVkqDevice(), CommandPoolCI);
+		m_spRenderDevice = bIsDefaultQueue ? nullptr : pRenderDevice;
 	}
 
 	CommandQueueVk::~CommandQueueVk()
 	{
 		vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
 		const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
-		//m_DefaultCommandPool.destory();
 
-		m_spRenderDevice->QueueWaitIdle(m_QueueIndex);
+		m_pHardwareQueue->WaitIdle();
 
 		CheckPendingSubmissions(true);
 
@@ -179,7 +169,7 @@ namespace Qgfx
 		SubmitInfo.pWaitSemaphores = m_WaitSemaphores.data();
 		SubmitInfo.pWaitDstStageMask = WaitStageMasks.data();
 
-		m_spRenderDevice->QueueSubmit(m_QueueIndex, SubmitInfo, CompletionFence);
+		m_pHardwareQueue->Submit(SubmitInfo, CompletionFence);
 
 		m_SignalSemaphores.clear();
 		m_WaitSemaphores.clear();
@@ -197,7 +187,7 @@ namespace Qgfx
 	{
 		std::lock_guard Lock{ m_Mutex };
 
-		m_spRenderDevice->QueuePresent(m_QueueIndex, PresentInfo);
+		m_pHardwareQueue->Present(PresentInfo);
 	}
 
 	void CommandQueueVk::ReleasePoolAndBuffer(vk::CommandPool VkCmdPool, vk::CommandBuffer VkCmdBuffer)
@@ -220,6 +210,18 @@ namespace Qgfx
 		SemToDelete.Semaphore = Semaphore;
 
 		m_SemaphoresToDelete.push_back(SemToDelete);
+	}
+
+	void CommandQueueVk::DeleteTextureWhenUnused(vk::Image Image, VmaAllocation Allocation)
+	{
+		std::lock_guard Lock{ m_Mutex };
+
+		TextureToDelete TexToDelete{};
+		TexToDelete.Index = m_NextSubmissionIndex;
+		TexToDelete.Image = Image;
+		TexToDelete.Allocation = Allocation;
+
+		m_TexturesToDelete.push_back(TexToDelete);
 	}
 
 	void CommandQueueVk::AddSignalSemaphore(vk::Semaphore Signal)
@@ -298,6 +300,21 @@ namespace Qgfx
 				break;
 			}
 		}
+
+		while (!m_TexturesToDelete.empty())
+		{
+			TextureToDelete& TexToDelete = m_TexturesToDelete.front();
+
+			if (TexToDelete.Index <= m_CompletedSubmissionIndex)
+			{
+				m_spRenderDevice->DestroyVkTexture(TexToDelete.Image, TexToDelete.Allocation);
+				m_TexturesToDelete.pop_front();
+			}
+			else
+			{
+				break;
+			}
+		}
 	}
 
 	void CommandQueueVk::CreateCommandBuffer(ICommandBuffer** ppCommandBuffer)
@@ -314,7 +331,7 @@ namespace Qgfx
 			vk::CommandPoolCreateInfo PoolCI{};
 			PoolCI.pNext = nullptr;
 			PoolCI.flags = {};
-			PoolCI.queueFamilyIndex = m_spRenderDevice->GetQueueFamilyIndex(m_QueueIndex);
+			PoolCI.queueFamilyIndex = m_pHardwareQueue->GetVkQueueFamilyIndex();
 
 			PoolAndBuffer.Pool = VkDevice.createCommandPool(PoolCI, nullptr, VkDispatch);
 
@@ -346,7 +363,7 @@ namespace Qgfx
 	{
 		std::lock_guard Lock{ m_Mutex };
 
-		m_spRenderDevice->QueueWaitIdle(m_QueueIndex);
+		m_pHardwareQueue->WaitIdle();
 	}
 
 }

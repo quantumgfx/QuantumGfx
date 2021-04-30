@@ -1,5 +1,7 @@
 #include "Qgfx/Graphics/Vulkan/RenderDeviceVk.hpp"
 #include "Qgfx/Graphics/Vulkan/FenceVk.hpp"
+#include "Qgfx/Graphics/Vulkan/HardwareQueueVk.hpp"
+#include "Qgfx/Graphics/Vulkan/CommandQueueVk.hpp"
 
 namespace Qgfx
 {
@@ -8,33 +10,33 @@ namespace Qgfx
 	{
 		switch (RequestedState)
 		{
-		case DeviceFeatureState::Disabled:
+		case DeviceFeatureState::eDisabled:
 		{
 			EnableFeature = VK_FALSE;
-			return DeviceFeatureState::Disabled;
+			return DeviceFeatureState::eDisabled;
 		}
-		case DeviceFeatureState::Enabled:
+		case DeviceFeatureState::eEnabled:
 		{
 			EnableFeature = IsFeatureSupported;
 			if (IsFeatureSupported)
-				return DeviceFeatureState::Enabled;
+				return DeviceFeatureState::eEnabled;
 			else
 				QGFX_LOG_ERROR_AND_THROW(FeatureName, " not supported by this device");
 		}
 
-		case DeviceFeatureState::Optional:
+		case DeviceFeatureState::eOptional:
 		{
 			EnableFeature = IsFeatureSupported;
-			return IsFeatureSupported ? DeviceFeatureState::Enabled : DeviceFeatureState::Disabled;
+			return IsFeatureSupported ? DeviceFeatureState::eEnabled : DeviceFeatureState::eDisabled;
 		}
 		default:
 			QGFX_UNEXPECTED("Unexpected feature state");
 			EnableFeature = VK_FALSE;
-			return DeviceFeatureState::Disabled;
+			return DeviceFeatureState::eDisabled;
 		}
 	}
 
-	RenderDeviceVk::RenderDeviceVk(RefCounter* pRefCounter, EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo)
+	RenderDeviceVk::RenderDeviceVk(IRefCounter* pRefCounter, EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo, const ArrayProxy<HardwareQueueInfoVk>& RequestedExtraHardwareQueues)
 		: IRenderDevice(pRefCounter)
 	{
 		m_spEngineFactory =  pEngineFactory;
@@ -45,8 +47,8 @@ namespace Qgfx
 
 		auto& RequestedFeatures = CreateInfo.Features;
 
-		m_DeviceFeatures.IndirectRendering = DeviceFeatureState::Enabled;
-		m_DeviceFeatures.ComputeShaders = DeviceFeatureState::Enabled;
+		m_DeviceFeatures.IndirectRendering = DeviceFeatureState::eEnabled;
+		m_DeviceFeatures.ComputeShaders = DeviceFeatureState::eEnabled;
 
 		vk::PhysicalDeviceFeatures2 SupportedFeatures2{};
 		vk::PhysicalDeviceFeatures& Supported10Features = SupportedFeatures2.features;
@@ -76,8 +78,21 @@ namespace Qgfx
 		}
 
 		// Extensions
+		std::vector<vk::ExtensionProperties> SupportedExtensions = m_VkPhysicalDevice.enumerateDeviceExtensionProperties(nullptr, m_VkDispatch);
+
+		bool bMemoryBudgetExtEnabled = false;
+
 		std::vector<const char*> EnabledExtensions{};
 		EnabledExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+		for (auto& Extension : SupportedExtensions)
+		{
+			if (std::strcmp(Extension.extensionName, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) == 0)
+			{
+				EnabledExtensions.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+				bMemoryBudgetExtEnabled = true;
+			}
+		}
 
 		//////////////////////////
 		// Queues ////////////////
@@ -85,110 +100,122 @@ namespace Qgfx
 
 		std::vector<vk::QueueFamilyProperties> QueueFamiles = m_VkPhysicalDevice.getQueueFamilyProperties(m_VkDispatch);
 
-		std::vector<uint32_t> GeneralQueueFamilies{};
-		std::vector<uint32_t> ComputeQueueFamilies{};
-		std::vector<uint32_t> TransferQueueFamilies{};
+		struct QueueFamily
+		{
+			uint32_t Index;
+			uint32_t NumQueues;
+			uint32_t NumUsedQueues;
+
+			QueueFamily(uint32_t Index, uint32_t NumQueues)
+				: Index(Index), NumQueues(NumQueues), NumUsedQueues(0)
+			{
+			}
+		};
+
+		std::vector<QueueFamily> GeneralQueueFamilies{};
+		std::vector<QueueFamily> ComputeQueueFamilies{};
+		std::vector<QueueFamily> TransferQueueFamilies{};
 
 		struct QueueFamilyDesc
 		{
 			uint32_t QueueCount;
 			uint32_t CurrentIndex;
 		};
-
-		// Keeps track of the current index within each family
-		std::vector<uint32_t> CurrentQueueIndex{};
 		
 		for (size_t QueueFamilyIndex = 0; QueueFamilyIndex < QueueFamiles.size(); QueueFamilyIndex++)
 		{
-			const vk::QueueFamilyProperties& QueueFamily = QueueFamiles[QueueFamilyIndex];
+			const vk::QueueFamilyProperties& QueueFamilyProps = QueueFamiles[QueueFamilyIndex];
 
 			bool bSupportsPresentation = false; // Whether or not the queue supports presentation
 
-#ifdef QGFX_PLATFORM_WIN32
+#ifdef VK_USE_PLATFORM_WIN32_KHR
 			bSupportsPresentation = m_VkPhysicalDevice.getWin32PresentationSupportKHR(QueueFamilyIndex, m_VkDispatch);
 #else
 			bSupportsPresentation = static_cast<bool>(QueueFamily.queueFlags & vk::QueueFlagBits::eGraphics);
 #endif
-			if (QueueFamily.queueFlags & vk::QueueFlagBits::eGraphics)
+			if (QueueFamilyProps.queueFlags & vk::QueueFlagBits::eGraphics)
 			{ // Supports Graphics, Compute, and Transfer
 				if(bSupportsPresentation)
-					GeneralQueueFamilies.push_back(QueueFamilyIndex);
+					GeneralQueueFamilies.push_back(QueueFamily{ QueueFamilyIndex , QueueFamilyProps.queueCount });
 			}
-			else if (QueueFamily.queueFlags & vk::QueueFlagBits::eCompute)
+			else if (QueueFamilyProps.queueFlags & vk::QueueFlagBits::eCompute)
 			{ // Supports Compute and Transfer
-				ComputeQueueFamilies.push_back(QueueFamilyIndex);
+				ComputeQueueFamilies.push_back(QueueFamily{ QueueFamilyIndex , QueueFamilyProps.queueCount });
 			}
-			else if (QueueFamily.queueFlags & vk::QueueFlagBits::eTransfer)
+			else if (QueueFamilyProps.queueFlags & vk::QueueFlagBits::eTransfer)
 			{ // Supports Transfer
 
-				TransferQueueFamilies.push_back(QueueFamilyIndex);
+				TransferQueueFamilies.push_back(QueueFamily{ QueueFamilyIndex , QueueFamilyProps.queueCount });
 			}
-
-			CurrentQueueIndex.push_back(0);
 		}
 
-		if (GeneralQueueFamilies.size() >= 1)
+		if (GeneralQueueFamilies.size() < 1)
 		{
-			QGFX_LOG_ERROR_AND_THROW("Device doesn't support graphics queue family with present capibilities");
+			QGFX_LOG_ERROR_AND_THROW("Device doesn't support a graphics queue family with present capibilities");
 		}
 
-		struct PerQueueFamily
+		QueueFamily& DefaultQueueFamily = GeneralQueueFamilies.front();
+		QGFX_VERIFY_EXPR(DefaultQueueFamily.NumQueues >= 1);
+		DefaultQueueFamily.NumUsedQueues += 1;
+
+		HardwareQueueVkCreateInfo DefaultHardwareQueueCI{};
+		DefaultHardwareQueueCI.QueueFamilyIndex = DefaultQueueFamily.Index;
+		DefaultHardwareQueueCI.QueueIndex = 0;
+		DefaultHardwareQueueCI.Info.Priority = 1.0f;
+		DefaultHardwareQueueCI.Info.QueueType = CommandQueueType::eGeneral;
+
+		std::vector<HardwareQueueVkCreateInfo> ExtraHardwareQueueCreateInfos{};
+
+		for (const HardwareQueueInfoVk& HardwareQueueInfo : RequestedExtraHardwareQueues)
 		{
-			vk::DeviceQueueCreateInfo CreateInfo;
-			std::vector<float> Priorities;
-		};
-
-		std::vector<PerQueueFamily> PerQueueFamilyInfo;
-
-		for (uint32_t Index; Index < CreateInfo.NumRequestedQueues; Index++)
-		{
-			const DeviceQueueInfoVk& QueueInfo = CreateInfo.pRequestedQueues[Index];
-
-			uint32_t QueueFamily = UINT32_MAX;
+			uint32_t QueueFamilyIndex = UINT32_MAX;
 			uint32_t QueueIndex = UINT32_MAX;
 
 			//////////////////////
 			// Finds best queue //
 			//////////////////////
 
-			if (QueueFamily == UINT32_MAX && QueueInfo.QueueType == CommandQueueType::Transfer)
+			if (QueueFamilyIndex == UINT32_MAX && HardwareQueueInfo.QueueType == CommandQueueType::eTransfer)
 			{
-				for (uint32_t QueueFamilyIndex : TransferQueueFamilies)
+				for (QueueFamily& Family : TransferQueueFamilies)
 				{
-					if (CurrentQueueIndex[QueueFamilyIndex] < QueueFamiles[QueueFamilyIndex].queueCount)
+					if (Family.NumUsedQueues < Family.NumQueues)
 					{
-						QueueFamily = QueueFamilyIndex;
-						QueueIndex = CurrentQueueIndex[QueueFamilyIndex];
-						CurrentQueueIndex[QueueFamilyIndex] += 1;
+						QueueFamilyIndex = Family.Index;
+						QueueIndex = Family.NumUsedQueues;
+						Family.NumUsedQueues += 1;
+						break;
 					}
 				}
 			}
 
-			if (QueueFamily == UINT32_MAX && (QueueInfo.QueueType == CommandQueueType::Transfer ||
-											 QueueInfo.QueueType == CommandQueueType::Compute))
+			if (QueueFamilyIndex == UINT32_MAX && (HardwareQueueInfo.QueueType == CommandQueueType::eTransfer ||
+				HardwareQueueInfo.QueueType == CommandQueueType::eCompute))
 			{
-				for (uint32_t QueueFamilyIndex : ComputeQueueFamilies)
+				for (QueueFamily& Family : ComputeQueueFamilies)
 				{
-					if (CurrentQueueIndex[QueueFamilyIndex] < QueueFamiles[QueueFamilyIndex].queueCount)
+					if (Family.NumUsedQueues < Family.NumQueues)
 					{
-						QueueFamily = QueueFamilyIndex;
-						QueueIndex = CurrentQueueIndex[QueueFamilyIndex];
-						CurrentQueueIndex[QueueFamilyIndex] += 1;
+						QueueFamilyIndex = Family.Index;
+						QueueIndex = Family.NumUsedQueues;
+						Family.NumUsedQueues += 1;
+						break;
 					}
 				}
 			}
 
-			if (QueueFamily == UINT32_MAX && (QueueInfo.QueueType == CommandQueueType::Transfer||
-											 QueueInfo.QueueType == CommandQueueType::Compute ||
-											 QueueInfo.QueueType == CommandQueueType::General))
+			if (QueueFamilyIndex == UINT32_MAX && (HardwareQueueInfo.QueueType == CommandQueueType::eTransfer ||
+				HardwareQueueInfo.QueueType == CommandQueueType::eCompute ||
+				HardwareQueueInfo.QueueType == CommandQueueType::eGeneral))
 			{
-				for (uint32_t QueueFamilyIndex : GeneralQueueFamilies)
+				for (QueueFamily& Family : GeneralQueueFamilies)
 				{
-					if (CurrentQueueIndex[QueueFamilyIndex] < QueueFamiles[QueueFamilyIndex].queueCount)
+					if (Family.NumUsedQueues < Family.NumQueues)
 					{
-						QueueFamily = QueueFamilyIndex;
-						QueueIndex = CurrentQueueIndex[QueueFamilyIndex];
-						CurrentQueueIndex[QueueFamilyIndex] += 1;
+						QueueFamilyIndex = Family.Index;
+						QueueIndex = Family.NumUsedQueues;
+						Family.NumUsedQueues += 1;
+						break;
 					}
 				}
 			}
@@ -197,48 +224,67 @@ namespace Qgfx
 			///////////////////////
 			///////////////////////
 
-			if (QueueFamily != UINT32_MAX)
+			if (QueueFamilyIndex != UINT32_MAX)
 			{
-				while (QueueFamily >= PerQueueFamilyInfo.size())
-				{
-					vk::DeviceQueueCreateInfo QueueCreateInfo{};
-					QueueCreateInfo.pNext = nullptr;
-					QueueCreateInfo.flags = {};
-					QueueCreateInfo.pQueuePriorities = nullptr;
-					QueueCreateInfo.queueFamilyIndex = UINT32_MAX;
-					QueueCreateInfo.queueCount = 0;
+				HardwareQueueVkCreateInfo HardwareQueueCI{};
+				HardwareQueueCI.QueueFamilyIndex = QueueFamilyIndex;
+				HardwareQueueCI.QueueIndex = QueueIndex;
+				HardwareQueueCI.Info.Priority = HardwareQueueInfo.Priority;
+				HardwareQueueCI.Info.QueueType = HardwareQueueInfo.QueueType;
 
-					PerQueueFamily PerFamily;
-					PerFamily.CreateInfo = QueueCreateInfo;
-					PerFamily.Priorities = {};
-
-					PerQueueFamilyInfo.push_back(PerFamily);
-				}
-
-				while (QueueIndex >= PerQueueFamilyInfo[QueueFamily].Priorities.size())
-				{
-					PerQueueFamilyInfo[QueueFamily].Priorities.push_back(0.0f);
-				}
-
-				PerQueueFamilyInfo[QueueFamily].Priorities[QueueIndex] = QueueInfo.Priority;
-				PerQueueFamilyInfo[QueueFamily].CreateInfo.pQueuePriorities = PerQueueFamilyInfo[QueueFamily].Priorities.data();
-				PerQueueFamilyInfo[QueueFamily].CreateInfo.queueFamilyIndex = QueueFamily;
-				PerQueueFamilyInfo[QueueFamily].CreateInfo.queueCount = QueueIndex;
-
-				QueueDesc Queue;
-				Queue.FamilyIndex = QueueFamily;
-				Queue.Index = QueueIndex;
-				Queue.Info = QueueInfo;
-				// Queue::Handle is filled after creating the device
-				m_Queues.push_back(Queue);
+				ExtraHardwareQueueCreateInfos.push_back(HardwareQueueCI);
 			}
 			else
 			{
 				// No remaining queues can support a universal render type.
 				break;
 			}
+		}
 
-			m_NumSupportedQueues++;
+		struct QueueCreateInfoAndPriorities
+		{
+			vk::DeviceQueueCreateInfo CreateInfo;
+			std::vector<float> Priorities;
+
+			QueueCreateInfoAndPriorities()
+			{
+				CreateInfo.pNext = nullptr;
+				CreateInfo.flags = {};
+				CreateInfo.pQueuePriorities = nullptr;
+				CreateInfo.queueFamilyIndex = UINT32_MAX;
+				CreateInfo.queueCount = 0;
+
+				Priorities = {};
+			}
+		};
+
+		std::vector<QueueCreateInfoAndPriorities> QueueCreateInfosAndPriorities;
+
+		std::vector<HardwareQueueVkCreateInfo> HardwareQueueCreateInfos(ExtraHardwareQueueCreateInfos);
+		HardwareQueueCreateInfos.push_back(DefaultHardwareQueueCI);
+
+		for (const auto& HardwareQueueCreateInfo : HardwareQueueCreateInfos)
+		{
+			auto QueueFamilyIndex = HardwareQueueCreateInfo.QueueFamilyIndex;
+			auto QueueIndex = HardwareQueueCreateInfo.QueueIndex;
+
+			while (QueueFamilyIndex >= QueueCreateInfosAndPriorities.size())
+			{
+				QueueCreateInfosAndPriorities.emplace_back();
+			}
+
+			auto& CreateInfoAndPriorities = QueueCreateInfosAndPriorities[HardwareQueueCreateInfo.QueueFamilyIndex];
+
+			while (HardwareQueueCreateInfo.QueueIndex >= CreateInfoAndPriorities.Priorities.size())
+			{
+				CreateInfoAndPriorities.Priorities.push_back(0.0f);
+			}
+
+			CreateInfoAndPriorities.Priorities[QueueIndex] = HardwareQueueCreateInfo.Info.Priority;
+
+			CreateInfoAndPriorities.CreateInfo.pQueuePriorities = CreateInfoAndPriorities.Priorities.data();
+			CreateInfoAndPriorities.CreateInfo.queueFamilyIndex = QueueFamilyIndex;
+			CreateInfoAndPriorities.CreateInfo.queueCount = QueueIndex;
 		}
 
 		////////////////////////
@@ -247,7 +293,7 @@ namespace Qgfx
 
 		std::vector<vk::DeviceQueueCreateInfo> DeviceQueueCreateInfos{};
 
-		for (const PerQueueFamily& Info : PerQueueFamilyInfo)
+		for (const QueueCreateInfoAndPriorities& Info : QueueCreateInfosAndPriorities)
 		{
 			if (Info.CreateInfo.queueCount > 0)
 			{
@@ -276,35 +322,81 @@ namespace Qgfx
 			QGFX_LOG_ERROR_AND_THROW("vkCreateDevice failed with error: ", Error.what());
 		}
 
-		// Set queue handles
-		for (QueueDesc& Queue : m_Queues)
+		m_pDefaultHardwareQueue = new HardwareQueueVk(this, DefaultHardwareQueueCI);
+		m_spDefaultCommandQueue = MakeRefCountedObj<CommandQueueVk>()(this, m_pDefaultHardwareQueue, true);
+
+		for (const auto& ExtraQueueCreateInfo : ExtraHardwareQueueCreateInfos)
 		{
-			Queue.Handle = m_VkDevice.getQueue(Queue.FamilyIndex, Queue.Index, m_VkDispatch);
+			m_ExtraHardwareQueues.push_back(new HardwareQueueVk(this, ExtraQueueCreateInfo));
 		}
+
+		////////////////////////////
+		// Memory Allocator ////////
+		////////////////////////////
+
+		VmaVulkanFunctions Funcs{};
+		Funcs.vkAllocateMemory =   m_VkDispatch.vkAllocateMemory;
+		Funcs.vkBindBufferMemory = m_VkDispatch.vkBindBufferMemory;
+		Funcs.vkBindImageMemory =  m_VkDispatch.vkBindImageMemory;
+		Funcs.vkCmdCopyBuffer =    m_VkDispatch.vkCmdCopyBuffer;
+		Funcs.vkCreateBuffer =     m_VkDispatch.vkCreateBuffer;
+		Funcs.vkCreateImage =      m_VkDispatch.vkCreateImage;
+		Funcs.vkDestroyBuffer =    m_VkDispatch.vkDestroyBuffer;
+		Funcs.vkDestroyImage =     m_VkDispatch.vkDestroyImage;
+		Funcs.vkFlushMappedMemoryRanges =     m_VkDispatch.vkFlushMappedMemoryRanges;
+		Funcs.vkFreeMemory =                  m_VkDispatch.vkFreeMemory;
+		Funcs.vkGetBufferMemoryRequirements = m_VkDispatch.vkGetBufferMemoryRequirements;
+		Funcs.vkGetImageMemoryRequirements =  m_VkDispatch.vkGetImageMemoryRequirements;
+		Funcs.vkGetPhysicalDeviceMemoryProperties =     m_VkDispatch.vkGetPhysicalDeviceMemoryProperties;
+		Funcs.vkInvalidateMappedMemoryRanges =          m_VkDispatch.vkInvalidateMappedMemoryRanges;
+		Funcs.vkMapMemory =                             m_VkDispatch.vkMapMemory;
+		Funcs.vkUnmapMemory =                           m_VkDispatch.vkUnmapMemory;
+		Funcs.vkGetPhysicalDeviceMemoryProperties2KHR = m_VkDispatch.vkGetPhysicalDeviceMemoryProperties2;
+		Funcs.vkBindBufferMemory2KHR =                  m_VkDispatch.vkBindBufferMemory2;
+		Funcs.vkBindImageMemory2KHR =                   m_VkDispatch.vkBindImageMemory2;
+		Funcs.vkGetBufferMemoryRequirements2KHR =       m_VkDispatch.vkGetBufferMemoryRequirements2;
+		Funcs.vkGetImageMemoryRequirements2KHR =        m_VkDispatch.vkGetImageMemoryRequirements2;
+
+		VmaAllocatorCreateFlags Flags = 0;
+
+		if (bMemoryBudgetExtEnabled)
+		{
+			Flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+		}
+
+		VmaAllocatorCreateInfo AllocatorCI{};
+		AllocatorCI.instance = pEngineFactory->GetVkInstance();
+		AllocatorCI.physicalDevice = m_VkPhysicalDevice;
+		AllocatorCI.device =         m_VkDevice;
+		AllocatorCI.pVulkanFunctions = &Funcs;
+		AllocatorCI.pRecordSettings = nullptr;
+		AllocatorCI.pAllocationCallbacks = nullptr;
+		AllocatorCI.pHeapSizeLimit = nullptr;
+		AllocatorCI.frameInUseCount = 0;
+		//AllocatorCI.preferredLargeHeapBlockSize = 0;
+		AllocatorCI.flags = Flags;
+		AllocatorCI.vulkanApiVersion = VK_MAKE_VERSION(1, 2, 0);
+
+		vmaCreateAllocator(nullptr, &m_VmaAllocator);
 	}
 
 	RenderDeviceVk::~RenderDeviceVk()
 	{
+		m_VkDevice.waitIdle(m_VkDispatch);
+
+		m_spDefaultCommandQueue.Reset();
+
+		vmaDestroyAllocator(m_VmaAllocator);
+
+		for (HardwareQueueVk* pHardwareQueue : m_ExtraHardwareQueues)
+		{
+			delete pHardwareQueue;
+		}
+
+		delete m_pDefaultHardwareQueue;
+
 		m_VkDevice.destroy();
 		m_VkPhysicalDevice = nullptr;
-	}
-
-	void RenderDeviceVk::QueueWaitIdle(uint32_t QueueIndex)
-	{
-		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
-		m_Queues[QueueIndex].Handle.waitIdle(m_VkDispatch);
-	}
-
-	void RenderDeviceVk::QueueSubmit(uint32_t QueueIndex, const vk::SubmitInfo& SubmitInfo, vk::Fence Fence)
-	{
-		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
-		m_Queues[QueueIndex].Handle.submit(SubmitInfo, Fence, m_VkDispatch);
-	}
-
-	void RenderDeviceVk::QueuePresent(uint32_t QueueIndex, const vk::PresentInfoKHR& PresentInfo)
-	{
-		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
-		m_Queues[QueueIndex].Handle.presentKHR(PresentInfo, m_VkDispatch);
 	}
 
 	vk::Semaphore RenderDeviceVk::CreateVkBinarySemaphore() const
@@ -321,22 +413,19 @@ namespace Qgfx
 		m_VkDevice.destroySemaphore(Sem, nullptr, m_VkDispatch);
 	}
 
-	uint32_t RenderDeviceVk::GetQueueFamilyIndex(uint32_t QueueIndex)
+	std::pair<vk::Image, VmaAllocation> RenderDeviceVk::CreateVkTexture(const vk::ImageCreateInfo& ImageCI, const VmaAllocationCreateInfo& AllocCI)
 	{
-		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
-		return m_Queues[QueueIndex].FamilyIndex;
+		VkImage Image;
+		VmaAllocation Alloc;
+
+		vmaCreateImage(m_VmaAllocator, &static_cast<const VkImageCreateInfo&>(ImageCI), &AllocCI, &Image, &Alloc, nullptr);
+
+		return std::make_pair(vk::Image(Image), Alloc);
 	}
 
-	vk::Queue RenderDeviceVk::GetVkQueue(uint32_t QueueIndex)
+	void RenderDeviceVk::DestroyVkTexture(vk::Image Image, VmaAllocation Allocation) const
 	{
-		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
-		return m_Queues[QueueIndex].Handle;
-	}
-
-	CommandQueueType RenderDeviceVk::GetQueueType(uint32_t QueueIndex)
-	{
-		QGFX_VERIFY(QueueIndex < m_NumSupportedQueues, "Queue Index not supported by physical device. Make sure QueueIndex < RenderDeviceVk::GetNumSupportedQueues().");
-		return m_Queues[QueueIndex].Info.QueueType;
+		vmaDestroyImage(m_VmaAllocator, static_cast<VkImage>(Image), Allocation);
 	}
 
 	void RenderDeviceVk::WaitIdle()
@@ -344,7 +433,35 @@ namespace Qgfx
 		m_VkDevice.waitIdle(m_VkDispatch);
 	}
 
-	void RenderDeviceVk::CreateFence(uint64_t InitialValue, IFence** ppFence)
+	void RenderDeviceVk::CreateBuffer(const BufferCreateInfo& CreateInfo, IBuffer** ppBuffer)
+	{
+	}
+
+	void RenderDeviceVk::CreateTexture(const TextureCreateInfo& CreateInfo, ITexture** ppTexture)
+	{
+	}
+
+	void RenderDeviceVk::CreateTextureFromVkImage(const TextureCreateInfo& CreateInfo, vk::Image VkImage, ITexture** ppTexture)
+	{
+	}
+
+	HardwareQueueVk* RenderDeviceVk::GetDefaultHardwareQueue()
+	{
+		return m_pDefaultHardwareQueue;
+	}
+
+	uint32_t RenderDeviceVk::GetNumExtraHardwareQueues()
+	{
+		return m_ExtraHardwareQueues.size();
+	}
+
+	HardwareQueueVk* RenderDeviceVk::GetExtraHardwareQueue(uint32_t HardwareQueueIndex)
+	{
+		QGFX_VERIFY(HardwareQueueIndex < m_ExtraHardwareQueues.size(), "Hardware Queue Index (", HardwareQueueIndex, ") is unsupported. Render device only supports (", m_ExtraHardwareQueues.size(),") queues.");
+		return m_ExtraHardwareQueues[HardwareQueueIndex];
+	}
+
+	/*void RenderDeviceVk::CreateFence(uint64_t InitialValue, IFence** ppFence)
 	{
 		if (m_bTimelineSemaphoresSupported)
 		{
@@ -354,5 +471,5 @@ namespace Qgfx
 		{
 			QGFX_UNSUPPORTED("This is currently unsupported");
 		}
-	}
+	}*/
 }

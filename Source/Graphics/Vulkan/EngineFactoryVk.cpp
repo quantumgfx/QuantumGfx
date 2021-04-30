@@ -12,7 +12,7 @@ namespace Qgfx
 		*ppEngineFactory = MakeRefCountedObj<EngineFactoryVk>()(CreateInfo);
 	}
 
-	EngineFactoryVk::EngineFactoryVk(RefCounter* pRefCounter, const EngineFactoryCreateInfoVk& CreateInfo)
+	EngineFactoryVk::EngineFactoryVk(IRefCounter* pRefCounter, const EngineFactoryCreateInfoVk& CreateInfo)
 		: IEngineFactory(pRefCounter)
 	{
 
@@ -111,17 +111,15 @@ namespace Qgfx
 		m_VkInstance.destroy(nullptr, m_VkDispatch);
 	}
 
-	void EngineFactoryVk::CreateRenderDevice(const RenderDeviceCreateInfoVk& DeviceCreateInfo, uint32_t* pNumSupportedQueues, IRenderDevice** ppDevice)
+	void EngineFactoryVk::CreateRenderDevice(const RenderDeviceCreateInfoVk& DeviceCreateInfo, const ArrayProxy<HardwareQueueInfoVk>& RequestedExtraHardwareQueues, IRenderDevice** ppDevice)
 	{
-		RenderDeviceVk* pRenderDevice = MakeRefCountedObj<RenderDeviceVk>()(this, DeviceCreateInfo);
-		if(pNumSupportedQueues)
-			*pNumSupportedQueues = pRenderDevice->GetNumSupportedQueues();
+		RenderDeviceVk* pRenderDevice = MakeRefCountedObj<RenderDeviceVk>()(this, DeviceCreateInfo, RequestedExtraHardwareQueues);
 		*ppDevice = pRenderDevice;
 	}
 
-	void EngineFactoryVk::CreateCommandQueue(IRenderDevice* pDevice, uint32_t QueueIndex, ICommandQueue** ppQueue)
+	void EngineFactoryVk::CreateCommandQueue(IRenderDevice* pDevice, HardwareQueueVk* pHardwareQueue, ICommandQueue** ppQueue)
 	{
-		CommandQueueVk* pCommandQueue = MakeRefCountedObj<CommandQueueVk>()(pDevice, QueueIndex);
+		CommandQueueVk* pCommandQueue = MakeRefCountedObj<CommandQueueVk>()(pDevice, pHardwareQueue, false);
 		*ppQueue = pCommandQueue;
 	}
 
