@@ -60,12 +60,6 @@ namespace Qgfx
 	{
 	public:
 
-		CommandQueueVk(IRefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, HardwareQueueVk* pHardwareQueue, bool bIsDefaultQueue);
-
-		~CommandQueueVk();
-
-		virtual CommandQueueType GetType() const override { return m_pHardwareQueue->GetQueueType(); }
-
 		virtual void CreateCommandBuffer(ICommandBuffer** ppCommandBuffer) override;
 
 		virtual void WaitIdle() override;
@@ -96,12 +90,21 @@ namespace Qgfx
 
 	private:
 
+		friend EngineFactoryVk;
+		friend RenderDeviceVk;
+
+		virtual void DeleteCommandBuffer(ICommandBuffer* pCommandBuffer) override;
+
+		CommandQueueVk(IEngineFactory* pEngineFactory, RenderDeviceVk* pRenderDevice, HardwareQueueVk* pHardwareQueue, bool bIsDefaultQueue);
+
+		~CommandQueueVk();
+
 		void CheckPendingSubmissions(bool bForceWaitIdle);
 
 	private:
 
 		// Strong reference to device. Used by non default queues to keep device alive.
-		RefPtr<RenderDeviceVk> m_spRenderDevice;
+		bool m_bDefaultQueue = false;
 
 		RenderDeviceVk* const m_pRenderDevice;
 
@@ -165,7 +168,7 @@ namespace Qgfx
 
 		std::mutex m_Mutex;
 
-		PoolAllocator m_CommandBufferHandleAllocator;
+		FixedBlockMemoryAllocator m_CommandBufferObjectAllocator;
 
 		FencePoolVk m_FencePool;
 

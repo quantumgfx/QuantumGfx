@@ -1,24 +1,24 @@
 #pragma once
 
-#include "IObject.hpp"
-
 #include "GraphicsTypes.hpp"
 #include "ITextureView.hpp"
 
 #include "ICommandQueue.hpp"
 
 #include "../Common/FlagsEnum.hpp"
+#include "../Common/RefCountedObject.hpp"
 
 namespace Qgfx
 {
+
     enum class TextureState
     {
         eUndefined = 0,
         eRenderAttachment,
         eDepthReadOnlyAttachment,
         eDepthAttachment,
-        eSampled,
-        eStorage,
+        eShaderResource,
+        eUnorderedAccess,
         eTransferSrc,
         eTransferDst,
         ePresent,
@@ -50,35 +50,6 @@ namespace Qgfx
         e3D
     };
 
-    enum class TextureAspectFlagBits
-    {
-        eNone = 0x00,
-        eColor = 0x01,
-        eDepth = 0x02,
-        eStencil = 0x04,
-        eDepthStencil = eDepth | eStencil,
-        eAll = eColor | eDepth | eStencil,
-    };
-
-    template<>
-    struct EnableEnumFlags<TextureAspectFlagBits>
-    {
-        static const bool bEnabled = true;
-    };
-
-    using TextureAspectFlags = Flags<TextureAspectFlagBits>;
-
-    enum class TextureViewDimension
-    {
-        e1D = 0,
-        e1DArray,
-        e2D,
-        e2DArray,
-        eCube,
-        eCubeArray,
-        e3D
-    };
-
     enum class TextureSampleCount
     {
         e1 = 0,
@@ -93,6 +64,8 @@ namespace Qgfx
         TextureFormat Format = TextureFormat::eRGBA8Unorm;
 
         TextureUsageFlags Usage = TextureUsageFlagBits::eNone;
+
+        ResourceMemoryUsage MemoryUsage = ResourceMemoryUsage::eGPUOnly;
 
         TextureDimension Dimension = TextureDimension::e1D;
 
@@ -109,8 +82,7 @@ namespace Qgfx
 
 		uint32_t MipLevels = 1;
 
-        ICommandQueue* pInitialQueue = nullptr;
-
+        TextureState InitialState = TextureState::eUndefined;
 	};
 
     struct TextureSubResData
@@ -147,11 +119,16 @@ namespace Qgfx
         uint32_t NumSubresources = 0;
     };
 
-	class ITexture : public IObject
+    struct TextureDeleter
+    {
+        void operator()(ITexture* pTexture);
+    };
+
+	class ITexture : public IRefCountedObject<ITexture, TextureDeleter>
 	{
 	public:
 
-        ITexture(IRefCounter* pRefCounter, const TextureCreateInfo& CreateInfo);
+        friend TextureDeleter;
 
         inline TextureFormat GetFormat() const { return m_Format; }
 
@@ -174,6 +151,12 @@ namespace Qgfx
         virtual void CreateView(const TextureViewCreateInfo& CreateInfo, ITextureView** ppView) = 0;
 
     protected:
+
+        ITexture(IRenderDevice* pRenderDevice, const TextureCreateInfo& CreateInfo);
+
+        virtual ~ITexture() = default;
+
+        IRenderDevice* m_pRenderDevice;
 
         TextureDimension m_Dimension;
         TextureUsageFlags m_Usage;

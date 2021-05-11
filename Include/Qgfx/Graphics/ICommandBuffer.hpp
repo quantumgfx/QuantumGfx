@@ -1,27 +1,43 @@
 #pragma once
 
-#include "IObject.hpp"
+#include "Forward.hpp"
+
+#include "../Common/RefCountedObject.hpp"
 
 namespace Qgfx
 {
 	enum class CommandBufferState
 	{
-		Recording = 0,
-		Ready,
-		Executing,
+		eRecording = 0,
+		eReady,
+		eExecuting,
 	};
 
-	class ICommandBuffer : public IObject
+	struct CommandBufferDeleter
+	{
+		void operator()(ICommandBuffer* pCommandBuffer);
+	};
+
+	class ICommandBuffer : public IRefCountedObject<ICommandBuffer, CommandBufferDeleter>
 	{
 	public:
 
-		ICommandBuffer(IRefCounter* pRefCounter)
-			: IObject(pRefCounter)
-		{
-		}
+		friend struct CommandBufferDeleter;
+
+		virtual ~ICommandBuffer();
 
 		virtual void Finish() = 0;
 
-		virtual CommandBufferState GetCurrentState() = 0;
+		virtual void Destroy() = 0;
+
+		inline CommandBufferState GetCurrentState() { return m_CurrentState; }
+
+	protected:
+
+		ICommandBuffer(ICommandQueue* pCommandQueue);
+
+		ICommandQueue* m_pCommandQueue;
+
+		CommandBufferState m_CurrentState = CommandBufferState::eRecording;
 	};
 }

@@ -11,15 +11,20 @@ namespace Qgfx
 	{
 	public:
 
-		TextureVk(IRefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, const TextureCreateInfo& CreateInfo);
-
-		TextureVk(IRefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, const TextureCreateInfo& CreateInfo, vk::Image VkExternalImage);
-
-		~TextureVk();
-
 		vk::Image GetVkImage() { return m_VkImage; }
 
 	private:
+
+		friend RenderDeviceVk;
+
+		TextureVk(IRenderDevice* pRenderDevice, const TextureCreateInfo& CreateInfo);
+
+		TextureVk(IRenderDevice* pRenderDevice, const TextureCreateInfo& CreateInfo, vk::Image VkExternalImage);
+
+		~TextureVk();
+
+	private:
+
 
 		RefPtr<RenderDeviceVk> m_spRenderDevice;
 		RefPtr<ICommandQueue> m_spCommandQueue;

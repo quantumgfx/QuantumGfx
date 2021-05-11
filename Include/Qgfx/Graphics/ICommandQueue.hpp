@@ -2,44 +2,57 @@
 
 #include "Forward.hpp"
 #include "GraphicsTypes.hpp"
-#include "IObject.hpp"
 #include "ISwapChain.hpp"
 #include "ICommandBuffer.hpp"
 
+#include "../Common/RefCountedObject.hpp"
+
 namespace Qgfx
 {
-
-	class ICommandQueue : public IObject
+	enum class CommandQueueType
 	{
+		/**
+		 * @brief General queues support presentation, graphics commands, compute commands, and transfer commands.
+		*/
+		eGeneral = 0,
+		/**
+		 * @brief Compute queues support compute commands and transfer commands
+		*/
+		eCompute,
+		/**
+		 * @brief Transfer queues only support transfer commands
+		*/
+		eTransfer,
+	};
+
+	class ICommandQueue : public IRefCountedObject<ICommandQueue>
+	{
+		friend struct CommandBufferDeleter;
+
 	public:
 
-		ICommandQueue(IRefCounter* pRefCounter)
-			: IObject(pRefCounter)
-		{
-		}
+		inline CommandQueueType GetType() const { return m_Type; }
 
-		virtual ~ICommandQueue() = default;
+		virtual ICommandBuffer* CreateCommandBuffer() = 0;
 
-		virtual CommandQueueType GetType() const = 0;
-
-		virtual void CreateCommandBuffer(ICommandBuffer** ppCommandBuffer) = 0;
-
-		/**
-		 * @brief Once all current pending work on the queue is completed, it will signal this fence to value.
-		 * @param pFence 
-		 * @param Value 
-		*/
-		virtual void SignalFence(IFence* pFence, uint64_t Value) = 0;
-
-		/**
-		 * @brief This call ensures that before any other commands are submitted on this queue, the given fence must reach the specified value.
-		 * @param pFence 
-		 * @param Value 
-		*/
-		virtual void WaitForFence(IFence* pFence, uint64_t Value) = 0;
+		virtual void SubmitCommandBuffers(uint32_t NumCommandBuffers, ICommandBuffer** ppCommandBuffers) = 0;
 
 		virtual void WaitIdle() = 0;
 
-		virtual void SubmitCommandBuffers(uint32_t NumCommandBuffers, ICommandBuffer** ppCommandBuffers) = 0;
+		virtual void Destroy() = 0;
+
+	protected:
+
+		ICommandQueue(IEngineFactory* pEngineFactory, CommandQueueType Type);
+
+		virtual ~ICommandQueue();
+
+		virtual void DeleteCommandBuffer(ICommandBuffer* pCommandBuffer) = 0;
+
+	protected:
+
+		IEngineFactory* m_pEngineFactory;
+
+		CommandQueueType m_Type;
 	};
 }

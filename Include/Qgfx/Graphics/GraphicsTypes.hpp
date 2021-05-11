@@ -15,36 +15,6 @@ namespace Qgfx
     // Enums ///////////////////
     ////////////////////////////
 
-    enum class GraphicsInstanceType
-    {
-        eVulkan = 1,
-    };
-
-    //enum class ImageMemoryType
-    //{
-    //    /**
-    //     * @brief A resource that can only be read by the GPU. It cannot be written by the GPU, and can not be accessed at all by the CPU. \n
-    //     * Static buffers do not allow CPU access and must use CPUAccess::None.
-    //    */
-    //    Immutable = 0,
-    //    Default,
-    //    Dynamic,
-    //    Staging,
-    //    Unified,
-    //};
-
-    enum class CompareFunc
-    {
-        eNever = 0,
-        eLess,
-        eEqual,
-        eLessEqual,
-        eGreater,
-        eGreaterEqual,
-        eNotEqual,
-        eAlways
-    };
-
     enum class TextureFormat
     {
         // 8-bit formats
@@ -113,94 +83,19 @@ namespace Qgfx
         eDepth32FloatStencil8Uint,
     };
 
-    enum class Filter
-    {
-        eNearest = 0,
-        eLinear,
-    };
-
-    enum class MipMode
-    {
-        eNearest = 0,
-        eLinear,
-    };
-
-    /**
-     * @brief Defines a comparison operation.
-    */
-    enum class CompareOp
-    {
-        eNever = 0,
-        eLess,
-        eEqual,
-        eLessOrEqual,
-        eGreater,
-        eNotEqual,
-        eGreaterOrEqual,
-        eAlways,
-    };
-
-    /**
-     * @brief Defines the technique used to resolve texture coordinates that outside of the boundaries of a texture.
-    */
-    enum class TextureAddressMode
-    {
-        eWrap,
-        eMirror,
-        eClamp,
-        eBorder,
-    };
-
-    enum class CommandQueueType
-    {
-        /**
-         * @brief General queues support presentation, graphics commands, compute commands, and transfer commands.
-        */
-        eGeneral = 0,
-        /**
-         * @brief Compute queues support compute commands and transfer commands
-        */
-        eCompute,
-        /**
-         * @brief Transfer queues only support transfer commands
-        */
-        eTransfer,
-    };
-
-    /////////////////////////
-    // Device structs ///////
-    /////////////////////////
-
-    enum class DeviceFeatureState
-    {
-        eDisabled = 0,
-        eEnabled,
-        eOptional
-    };
-
-    struct DeviceFeatures
-    {
-        DeviceFeatureState ComputeShaders = DeviceFeatureState::eDisabled;
-        DeviceFeatureState TesselationShaders = DeviceFeatureState::eDisabled;
-        DeviceFeatureState GeometryShaders = DeviceFeatureState::eDisabled;
-        DeviceFeatureState IndirectRendering = DeviceFeatureState::eDisabled;
-        DeviceFeatureState WireFrameFill = DeviceFeatureState::eDisabled;
-    };
-
-    struct APIInfo
-    {
-        uint32_t word;
-    };
-
-    struct RenderDeviceCreateInfo
-    {
-        DeviceFeatures Features;
-    };
-
     struct Extent3D
     {
         uint32_t Width;
         uint32_t Height;
         uint32_t Depth;
+    };
+
+    enum class ResourceMemoryUsage
+    {
+        eUnknown = 0,
+        eGPUOnly,
+        eCPUOnly,
+        eCPUToGPU,
+        eGPUToCPU,
     };
 }

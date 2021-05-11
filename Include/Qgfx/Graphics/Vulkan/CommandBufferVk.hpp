@@ -15,20 +15,17 @@ namespace Qgfx
 	{
 	public:
 
-		CommandBufferVk(IRefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, CommandQueueVk* pCommandQueue, vk::CommandPool VkCmdPool, vk::CommandBuffer VkCmdBuffer);
+		CommandBufferVk(ICommandQueue* pCommandQueue, RenderDeviceVk* pRenderDevice, vk::CommandPool VkCmdPool, vk::CommandBuffer VkCmdBuffer);
 
 		~CommandBufferVk();
 
 		virtual void Finish() override;
 
-		virtual CommandBufferState GetCurrentState() override { return m_State; }
-
 	private:
 
 		friend class CommandQueueVk;
 
-		RefPtr<RenderDeviceVk> m_spRenderDevice;
-		RefPtr<CommandQueueVk> m_spCommandQueue;
+		RenderDeviceVk* const m_pRenderDevice;
 
 		vk::CommandPool m_VkCmdPool;
 		vk::CommandBuffer m_VkCmdBuffer;

@@ -6,41 +6,50 @@
 
 #include "../IEngineFactory.hpp"
 #include "../IRenderDevice.hpp"
+#include "../StateObjectsRegistry.hpp"
 
 #include "../../Common/RefPtr.hpp"
+#include "../../Common/FixedBlockMemoryAllocator.hpp"
 
 #include <cstdint>
 
 namespace Qgfx
 {
+	class BufferVk;
+	class TextureVk;
 	class SwapChainVk;
 	class HardwareQueueVk;
 
 	class RenderDeviceVk final : public IRenderDevice
 	{
+
+		friend SwapChainVk;
+
 	public:
-
-		RenderDeviceVk(IRefCounter* pRefCounter, EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo, const ArrayProxy<HardwareQueueInfoVk>& RequestedExtraHardwareQueues);
-
-		~RenderDeviceVk();
 
 		///////////////////////////
 		// IRenderDevice Funcs ////
 		///////////////////////////
-
-		inline virtual const DeviceFeatures& GetFeatures() const override { return m_DeviceFeatures; }
-
+		// 
 		// virtual void CreateFence(uint64_t InitialValue, IFence** ppFence) override;
 
 		virtual void WaitIdle() override;
 
-		virtual ICommandQueue* GetDefaultQueue() override { return m_spDefaultCommandQueue; }
+		virtual IBuffer* CreateBuffer(const BufferCreateInfo& CreateInfo) override;
 
-		virtual void CreateBuffer(const BufferCreateInfo& CreateInfo, IBuffer** ppBuffer) override;
+		virtual ITexture* CreateTexture(const TextureCreateInfo& CreateInfo) override;
 
-		virtual void CreateTexture(const TextureCreateInfo& CreateInfo, ITexture** ppTexture) override;
+		ITexture* CreateTextureFromVkImage(const TextureCreateInfo& CreateInfo, vk::Image VkImage);
 
-		void CreateTextureFromVkImage(const TextureCreateInfo& CreateInfo, vk::Image VkImage, ITexture** ppTexture);
+		// virtual void CreateSampler(const SamplerCreateInfo& CreateInfo) override;
+
+		// void CreateShaderModule(const ShaderModuleCreateInfo& CreateInfo, IShaderModule** ppShaderModule);
+
+		// void DestroyShaderModule(IShaderModule* ShaderModule);
+
+		virtual ISwapChain* CreateSwapChain(const SwapChainCreateInfo& CreateInfo) override;
+
+		virtual void Destroy() = 0;
 
 		///////////////////////////
 		// Native Vk Functions ////
@@ -84,6 +93,18 @@ namespace Qgfx
 
 	private:
 
+		friend EngineFactoryVk;
+
+		void DestroyBuffer(BufferVk* pBuffer);
+		void DestroySwapChain(SwapChainVk* pSwapChain);
+		void DestroyTexture(TextureVk* pTexture);
+
+		RenderDeviceVk(EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo, IMemoryAllocator& RawMemAllocator);
+
+		~RenderDeviceVk();
+
+		RefPtr<EngineFactoryVk> m_spEngineFactory;
+
 		vk::DispatchLoaderDynamic m_VkDispatch;
 		vk::PhysicalDevice m_VkPhysicalDevice;
 		vk::Device m_VkDevice;
@@ -94,12 +115,8 @@ namespace Qgfx
 
 		std::vector<HardwareQueueVk*> m_ExtraHardwareQueues;
 
-		RefPtr<EngineFactoryVk> m_spEngineFactory;
+		ICommandQueue* m_pDefaultCommandQueue;
 
-		DeviceFeatures m_DeviceFeatures;
-
-		bool m_bTimelineSemaphoresSupported = false;
-
-		RefPtr<ICommandQueue> m_spDefaultCommandQueue;
+		FixedBlockMemoryAllocator m_TextureObjAllocator;
 	};
 }

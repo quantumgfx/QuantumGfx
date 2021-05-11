@@ -79,47 +79,4 @@ namespace Qgfx
 	{
 	}
 
-	vk::SurfaceTransformFlagBitsKHR SurfaceTransformToVkSurfaceTransformFlag(SurfaceTransform SrfTransform)
-	{
-		switch (SrfTransform)
-		{
-		case SurfaceTransform::Optimal:
-			QGFX_UNEXPECTED("Optimal transform does not have corresponding Vulkan flag");
-			return vk::SurfaceTransformFlagBitsKHR::eIdentity;
-
-		case SurfaceTransform::Identity:                   return vk::SurfaceTransformFlagBitsKHR::eIdentity;
-		case SurfaceTransform::Rotate90:                   return vk::SurfaceTransformFlagBitsKHR::eRotate90;
-		case SurfaceTransform::Rotate180:                  return vk::SurfaceTransformFlagBitsKHR::eRotate180;
-		case SurfaceTransform::Rotate270:                  return vk::SurfaceTransformFlagBitsKHR::eRotate270;
-		case SurfaceTransform::HorizontalMirror:           return vk::SurfaceTransformFlagBitsKHR::eHorizontalMirror;
-		case SurfaceTransform::HorizontalMirrorRotate90:   return vk::SurfaceTransformFlagBitsKHR::eHorizontalMirrorRotate90;
-		case SurfaceTransform::HorizontalMirrorRotate180:  return vk::SurfaceTransformFlagBitsKHR::eHorizontalMirrorRotate180;
-		case SurfaceTransform::HorizontalMirrorRotate270:  return vk::SurfaceTransformFlagBitsKHR::eHorizontalMirrorRotate270;
-
-		default:
-			QGFX_UNEXPECTED("Unexpected surface transform");
-			return vk::SurfaceTransformFlagBitsKHR::eIdentity;
-		}
-	}
-
-	SurfaceTransform VkSurfaceTransformFlagToSurfaceTransform(vk::SurfaceTransformFlagBitsKHR VkTransformFlag)
-	{
-		//QGFX_VERIFY(IsPowerOfTwo(static_cast<Uint32>(vkTransformFlag)), "Only single transform bit is expected");
-
-		switch (VkTransformFlag)
-		{
-		case vk::SurfaceTransformFlagBitsKHR::eIdentity:                  return SurfaceTransform::Identity;
-		case vk::SurfaceTransformFlagBitsKHR::eRotate90:                  return SurfaceTransform::Rotate90;
-		case vk::SurfaceTransformFlagBitsKHR::eRotate180:                 return SurfaceTransform::Rotate180;
-		case vk::SurfaceTransformFlagBitsKHR::eRotate270:                 return SurfaceTransform::Rotate270;
-		case vk::SurfaceTransformFlagBitsKHR::eHorizontalMirror:          return SurfaceTransform::HorizontalMirror;
-		case vk::SurfaceTransformFlagBitsKHR::eHorizontalMirrorRotate90:  return SurfaceTransform::HorizontalMirrorRotate90;
-		case vk::SurfaceTransformFlagBitsKHR::eHorizontalMirrorRotate180: return SurfaceTransform::HorizontalMirrorRotate180;
-		case vk::SurfaceTransformFlagBitsKHR::eHorizontalMirrorRotate270: return SurfaceTransform::HorizontalMirrorRotate270;
-
-		default:
-			QGFX_UNEXPECTED("Unexpected surface transform");
-			return SurfaceTransform::Identity;
-		}
-	}
 }

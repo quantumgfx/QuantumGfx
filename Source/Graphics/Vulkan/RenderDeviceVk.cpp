@@ -2,42 +2,47 @@
 #include "Qgfx/Graphics/Vulkan/FenceVk.hpp"
 #include "Qgfx/Graphics/Vulkan/HardwareQueueVk.hpp"
 #include "Qgfx/Graphics/Vulkan/CommandQueueVk.hpp"
+#include "Qgfx/Graphics/Vulkan/BufferVk.hpp"
+#include "Qgfx/Graphics/Vulkan/ShaderModuleVk.hpp"
+#include "Qgfx/Graphics/Vulkan/SwapChainVk.hpp"
+#include "Qgfx/Graphics/Vulkan/TextureVk.hpp"
 
 namespace Qgfx
 {
 
-	static inline DeviceFeatureState GetFeatureState(DeviceFeatureState RequestedState, vk::Bool32 IsFeatureSupported, vk::Bool32& EnableFeature, const char* FeatureName)
+	static inline RenderDeviceFeatureState GetFeatureState(RenderDeviceFeatureState RequestedState, vk::Bool32 IsFeatureSupported, vk::Bool32& EnableFeature, const char* FeatureName)
 	{
 		switch (RequestedState)
 		{
-		case DeviceFeatureState::eDisabled:
+		case RenderDeviceFeatureState::eDisabled:
 		{
 			EnableFeature = VK_FALSE;
-			return DeviceFeatureState::eDisabled;
+			return RenderDeviceFeatureState::eDisabled;
 		}
-		case DeviceFeatureState::eEnabled:
+		case RenderDeviceFeatureState::eEnabled:
 		{
 			EnableFeature = IsFeatureSupported;
 			if (IsFeatureSupported)
-				return DeviceFeatureState::eEnabled;
+				return RenderDeviceFeatureState::eEnabled;
 			else
 				QGFX_LOG_ERROR_AND_THROW(FeatureName, " not supported by this device");
 		}
 
-		case DeviceFeatureState::eOptional:
+		case RenderDeviceFeatureState::eOptional:
 		{
 			EnableFeature = IsFeatureSupported;
-			return IsFeatureSupported ? DeviceFeatureState::eEnabled : DeviceFeatureState::eDisabled;
+			return IsFeatureSupported ? RenderDeviceFeatureState::eEnabled : RenderDeviceFeatureState::eDisabled;
 		}
 		default:
 			QGFX_UNEXPECTED("Unexpected feature state");
 			EnableFeature = VK_FALSE;
-			return DeviceFeatureState::eDisabled;
+			return RenderDeviceFeatureState::eDisabled;
 		}
 	}
 
-	RenderDeviceVk::RenderDeviceVk(IRefCounter* pRefCounter, EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo, const ArrayProxy<HardwareQueueInfoVk>& RequestedExtraHardwareQueues)
-		: IRenderDevice(pRefCounter)
+	RenderDeviceVk::RenderDeviceVk(EngineFactoryVk* pEngineFactory, const RenderDeviceCreateInfoVk& CreateInfo, IMemoryAllocator& RawMemAllocator)
+		: IRenderDevice(pEngineFactory), 
+		m_TextureObjAllocator(RawMemAllocator, sizeof(TextureVk), 128)
 	{
 		m_spEngineFactory =  pEngineFactory;
 		m_VkDispatch = pEngineFactory->GetVkDispatch();
@@ -47,8 +52,8 @@ namespace Qgfx
 
 		auto& RequestedFeatures = CreateInfo.Features;
 
-		m_DeviceFeatures.IndirectRendering = DeviceFeatureState::eEnabled;
-		m_DeviceFeatures.ComputeShaders = DeviceFeatureState::eEnabled;
+		m_Features.IndirectRendering = RenderDeviceFeatureState::eEnabled;
+		m_Features.ComputeShaders = RenderDeviceFeatureState::eEnabled;
 
 		vk::PhysicalDeviceFeatures2 SupportedFeatures2{};
 		vk::PhysicalDeviceFeatures& Supported10Features = SupportedFeatures2.features;
@@ -66,15 +71,16 @@ namespace Qgfx
 		EnabledFeatures2.pNext = &Enabled11Features;
 		Enabled11Features.pNext = &Enabled12Features;
 
-		m_DeviceFeatures.GeometryShaders = GetFeatureState(RequestedFeatures.GeometryShaders, Supported10Features.geometryShader, Enabled10Features.geometryShader, "Geometry shaders are");
-		m_DeviceFeatures.TesselationShaders = GetFeatureState(RequestedFeatures.TesselationShaders, Supported10Features.tessellationShader, Enabled10Features.tessellationShader, "Tesselation is");
-		m_DeviceFeatures.WireFrameFill = GetFeatureState(RequestedFeatures.WireFrameFill, Supported10Features.fillModeNonSolid, Enabled10Features.fillModeNonSolid, "Wireframe fill is");
+		m_Features.GeometryShaders = GetFeatureState(RequestedFeatures.GeometryShaders, Supported10Features.geometryShader, Enabled10Features.geometryShader, "Geometry shaders are");
+		m_Features.TesselationShaders = GetFeatureState(RequestedFeatures.TesselationShaders, Supported10Features.tessellationShader, Enabled10Features.tessellationShader, "Tesselation is");
+		m_Features.PolygonModeLine = GetFeatureState(RequestedFeatures.PolygonModeLine, Supported10Features.fillModeNonSolid, Enabled10Features.fillModeNonSolid, "Line polygon mode is");
+		m_Features.PolygonModePoint = GetFeatureState(RequestedFeatures.PolygonModePoint, Supported10Features.fillModeNonSolid, Enabled10Features.fillModeNonSolid, "Point polygon mode is");
 		
 
 		if (Supported12Features.timelineSemaphore)
 		{
 			Enabled12Features.timelineSemaphore = true;
-			m_bTimelineSemaphoresSupported = true;
+			//m_bTimelineSemaphoresSupported = true;
 		}
 
 		// Extensions
@@ -165,6 +171,8 @@ namespace Qgfx
 		DefaultHardwareQueueCI.Info.QueueType = CommandQueueType::eGeneral;
 
 		std::vector<HardwareQueueVkCreateInfo> ExtraHardwareQueueCreateInfos{};
+
+		ArrayProxy<HardwareQueueInfoVk> RequestedExtraHardwareQueues(CreateInfo.NumRequestedExtraHardwareQueues, CreateInfo.pRequestedExtraHardwareQueues);
 
 		for (const HardwareQueueInfoVk& HardwareQueueInfo : RequestedExtraHardwareQueues)
 		{
@@ -323,7 +331,8 @@ namespace Qgfx
 		}
 
 		m_pDefaultHardwareQueue = new HardwareQueueVk(this, DefaultHardwareQueueCI);
-		m_spDefaultCommandQueue = MakeRefCountedObj<CommandQueueVk>()(this, m_pDefaultHardwareQueue, true);
+
+		m_pDefaultCommandQueue = new CommandQueueVk(m_pEngineFactory, this, m_pDefaultHardwareQueue, true);
 
 		for (const auto& ExtraQueueCreateInfo : ExtraHardwareQueueCreateInfos)
 		{
@@ -384,7 +393,7 @@ namespace Qgfx
 	{
 		m_VkDevice.waitIdle(m_VkDispatch);
 
-		m_spDefaultCommandQueue.Reset();
+		m_pDefaultCommandQueue->Release();
 
 		vmaDestroyAllocator(m_VmaAllocator);
 
@@ -433,15 +442,29 @@ namespace Qgfx
 		m_VkDevice.waitIdle(m_VkDispatch);
 	}
 
-	void RenderDeviceVk::CreateBuffer(const BufferCreateInfo& CreateInfo, IBuffer** ppBuffer)
+	IBuffer* RenderDeviceVk::CreateBuffer(const BufferCreateInfo& CreateInfo)
 	{
 	}
 
-	void RenderDeviceVk::CreateTexture(const TextureCreateInfo& CreateInfo, ITexture** ppTexture)
+	ISwapChain* RenderDeviceVk::CreateSwapChain(const SwapChainCreateInfo& CreateInfo)
+	{
+		return new SwapChainVk(this, CreateInfo);
+	}
+
+	void RenderDeviceVk::DestroySwapChain(SwapChainVk* pSwapChain)
+	{
+		delete pSwapChain;
+	}
+
+	ITexture* RenderDeviceVk::CreateTexture(const TextureCreateInfo& CreateInfo)
 	{
 	}
 
-	void RenderDeviceVk::CreateTextureFromVkImage(const TextureCreateInfo& CreateInfo, vk::Image VkImage, ITexture** ppTexture)
+	ITexture* RenderDeviceVk::CreateTextureFromVkImage(const TextureCreateInfo& CreateInfo, vk::Image VkImage)
+	{
+	}
+
+	void RenderDeviceVk::DestroyTexture(TextureVk* pTexture)
 	{
 	}
 

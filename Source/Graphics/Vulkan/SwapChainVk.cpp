@@ -6,14 +6,13 @@
 
 namespace Qgfx
 {
-	SwapChainVk::SwapChainVk(IRefCounter* pRefCounter, const SwapChainCreateInfo& CreateInfo, const NativeWindow& Window, RenderDeviceVk* pRenderDevice)
-		: ISwapChain(pRefCounter)
+	SwapChainVk::SwapChainVk(RenderDeviceVk* pRenderDevice, const SwapChainCreateInfo& CreateInfo)
+        : m_pRenderDevice(pRenderDevice)
 	{
         QGFX_VERIFY_EXPR(CreateInfo.pQueue);
 
-        m_spRenderDevice = pRenderDevice;
         m_spCommandQueue = ValidatedCast<CommandQueueVk>(CreateInfo.pQueue);
-        m_Window = Window;
+        m_Window = CreateInfo.Window;
 
         m_TextureFormat = CreateInfo.Format;
         m_DesiredTextureCount = CreateInfo.TextureCount;
@@ -29,11 +28,14 @@ namespace Qgfx
 
 	SwapChainVk::~SwapChainVk()
 	{
+        vk::Instance VkInstance = m_pRenderDevice->GetVkInstance();
+        const vk::DispatchLoaderDynamic& VkDispatch = m_pRenderDevice->GetVkDispatch();
+
         ReleaseSwapChainResources(true);
 
         if (m_VkSurface)
         {
-            m_spRenderDevice->GetVkInstance().destroySurfaceKHR(m_VkSurface);
+            VkInstance.destroySurfaceKHR(m_VkSurface, nullptr, VkDispatch);
             m_VkSurface = nullptr;
         }
 	}
@@ -43,8 +45,8 @@ namespace Qgfx
 
         QGFX_VERIFY(!m_bAcquired, "Texture is already acquired");
 
-        vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
-        const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
+        vk::Device VkDevice = m_pRenderDevice->GetVkDevice();
+        const vk::DispatchLoaderDynamic& VkDispatch = m_pRenderDevice->GetVkDispatch();
 
         // Applications should not rely on vkAcquireNextImageKHR blocking in order to
         // meter their rendering speed. The implementation may return from this function
@@ -85,7 +87,7 @@ namespace Qgfx
             m_bImageAcquired[m_OldestSemaphoreIndex] = false;
         }
 
-        vk::Semaphore ImageAcquiredSemaphore = m_spRenderDevice->CreateVkBinarySemaphore();
+        vk::Semaphore ImageAcquiredSemaphore = m_pRenderDevice->CreateVkBinarySemaphore();
 
         vk::Result Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, ImageAcquiredSemaphore, m_ImageAcquiredFences[m_SemaphoreIndex], &m_TextureIndex, VkDispatch);
 
@@ -93,11 +95,11 @@ namespace Qgfx
         {
             RecreateSwapChain();
 
-            m_spRenderDevice->DestroyVkSemaphore(ImageAcquiredSemaphore);
+            m_pRenderDevice->DestroyVkSemaphore(ImageAcquiredSemaphore);
 
             m_SemaphoreIndex = 0; // To start with 0 index when acquire next image
 
-            ImageAcquiredSemaphore = m_spRenderDevice->CreateVkBinarySemaphore();
+            ImageAcquiredSemaphore = m_pRenderDevice->CreateVkBinarySemaphore();
 
             Res = VkDevice.acquireNextImageKHR(m_VkSwapchain, UINT64_MAX, ImageAcquiredSemaphore, m_ImageAcquiredFences[m_SemaphoreIndex], &m_TextureIndex, VkDispatch);
         }
@@ -137,6 +139,11 @@ namespace Qgfx
         PresentInfo.pSwapchains = &m_VkSwapchain;
         PresentInfo.pImageIndices = &m_TextureIndex;
         PresentInfo.pResults = nullptr;
+    }
+
+    void SwapChainVk::Destroy()
+    {
+        m_pRenderDevice->DestroySwapChain(this);
     }
 
     void SwapChainVk::Resize(uint32_t NewWidth, uint32_t NewHeight, SurfaceTransform NewPreTransform)
@@ -229,7 +236,7 @@ namespace Qgfx
 	{
         if (m_VkSurface)
         {
-            m_spRenderDevice->GetVkInstance().destroySurfaceKHR(m_VkSurface, nullptr, m_spRenderDevice->GetVkDispatch());
+            m_pRenderDevice->GetVkInstance().destroySurfaceKHR(m_VkSurface, nullptr, m_pRenderDevice->GetVkDispatch());
             m_VkSurface = nullptr;
         }
 
@@ -243,7 +250,7 @@ namespace Qgfx
 				SurfaceCreateInfo.hinstance = GetModuleHandle(NULL);
 				SurfaceCreateInfo.hwnd = (HWND)m_Window.hWnd;
 
-				m_VkSurface = m_spRenderDevice->GetVkInstance().createWin32SurfaceKHR(SurfaceCreateInfo, nullptr, m_spRenderDevice->GetVkDispatch());
+				m_VkSurface = m_pRenderDevice->GetVkInstance().createWin32SurfaceKHR(SurfaceCreateInfo, nullptr, m_pRenderDevice->GetVkDispatch());
 			}
 #endif
 		}
@@ -256,15 +263,15 @@ namespace Qgfx
 	void SwapChainVk::CreateSwapChain()
 	{
 
-		vk::Device Dev = m_spRenderDevice->GetVkDevice();
-		vk::PhysicalDevice PhDev = m_spRenderDevice->GetVkPhysicalDevice();
-        const vk::DispatchLoaderDynamic& Dispatch = m_spRenderDevice->GetVkDispatch();
+		vk::Device VkDevice = m_pRenderDevice->GetVkDevice();
+		vk::PhysicalDevice VkPhDevice = m_pRenderDevice->GetVkPhysicalDevice();
+        const vk::DispatchLoaderDynamic& VkDispatch = m_pRenderDevice->GetVkDispatch();
 		
 		std::vector<vk::SurfaceFormatKHR> SupportedFormats{};
 
 		try
 		{
-			SupportedFormats = PhDev.getSurfaceFormatsKHR(m_VkSurface, Dispatch);
+			SupportedFormats = VkPhDevice.getSurfaceFormatsKHR(m_VkSurface, VkDispatch);
 		}
 		catch (const vk::SystemError& Error)
 		{
@@ -334,7 +341,7 @@ namespace Qgfx
 
         try
         {
-            SurfCapabilities = PhDev.getSurfaceCapabilitiesKHR(m_VkSurface);
+            SurfCapabilities = VkPhDevice.getSurfaceCapabilitiesKHR(m_VkSurface, VkDispatch);
         }
         catch (const vk::SystemError& Error)
         {
@@ -345,7 +352,7 @@ namespace Qgfx
 
         try
         {
-            PresentModes = PhDev.getSurfacePresentModesKHR(m_VkSurface, Dispatch);
+            PresentModes = VkPhDevice.getSurfacePresentModesKHR(m_VkSurface, VkDispatch);
         }
         catch (const vk::SystemError& Error)
         {
@@ -547,7 +554,7 @@ namespace Qgfx
 
         try
         {
-            m_VkSwapchain = Dev.createSwapchainKHR(SwapChainCI, nullptr, Dispatch);
+            m_VkSwapchain = VkDevice.createSwapchainKHR(SwapChainCI, nullptr, VkDispatch);
         }
         catch (const vk::SystemError& Error)
         {
@@ -556,12 +563,12 @@ namespace Qgfx
 
         if (OldSwapchain)
         {
-            Dev.destroySwapchainKHR(OldSwapchain, nullptr, Dispatch);
+            VkDevice.destroySwapchainKHR(OldSwapchain, nullptr, VkDispatch);
         }
 
         try
         {
-            vk::throwResultException(Dev.getSwapchainImagesKHR(m_VkSwapchain, &m_TextureCount, nullptr, Dispatch), "Failed to get buffer count");
+            vk::throwResultException(VkDevice.getSwapchainImagesKHR(m_VkSwapchain, &m_TextureCount, nullptr, VkDispatch), "Failed to get buffer count");
         }
         catch (const vk::SystemError& Error)
         {
@@ -602,7 +609,7 @@ namespace Qgfx
         TexCI.pInitialQueue = m_spCommandQueue;
 
         std::vector<vk::Image> m_VkImages(m_TextureCount);
-        vk::throwResultException(Dev.getSwapchainImagesKHR(m_VkSwapchain, &m_TextureCount, m_VkImages.data(), Dispatch), "Failed to retrieve vulkan swapchain images");
+        vk::throwResultException(VkDevice.getSwapchainImagesKHR(m_VkSwapchain, &m_TextureCount, m_VkImages.data(), VkDispatch), "Failed to retrieve vulkan swapchain images");
 
         for (uint32_t i = 0; i < m_TextureCount; ++i)
         {
@@ -613,16 +620,16 @@ namespace Qgfx
             FenceCI.pNext = nullptr;
             FenceCI.flags = {};
 
-            m_ImageAcquiredFences[i] = Dev.createFence(FenceCI, nullptr, Dispatch);
+            m_ImageAcquiredFences[i] = VkDevice.createFence(FenceCI, nullptr, VkDispatch);
 
             vk::SemaphoreCreateInfo SemaphoreCI = {};
 
             SemaphoreCI.pNext = nullptr;
             SemaphoreCI.flags = {}; // reserved for future use
 
-            m_SubmitCompleteSemaphores[i] = Dev.createSemaphore(SemaphoreCI, nullptr, Dispatch);
+            m_SubmitCompleteSemaphores[i] = VkDevice.createSemaphore(SemaphoreCI, nullptr, VkDispatch);
             
-            m_spRenderDevice->CreateTextureFromVkImage(TexCI, m_VkImages[m_TextureCount], &m_FrameTextures[m_TextureCount]);
+            m_pRenderDevice->CreateTextureFromVkImage(TexCI, m_VkImages[m_TextureCount], &m_FrameTextures[m_TextureCount]);
         }
         m_SemaphoreIndex = m_TextureCount - 1;
 	}
@@ -718,8 +725,8 @@ namespace Qgfx
 
     void SwapChainVk::WaitForImageAcquiredFences()
     {
-        auto& VkDevice = m_spRenderDevice->GetVkDevice();
-        auto& VkDispatch = m_spRenderDevice->GetVkDispatch();
+        auto& VkDevice = m_pRenderDevice->GetVkDevice();
+        auto& VkDispatch = m_pRenderDevice->GetVkDispatch();
 
         for (auto Fence : m_ImageAcquiredFences)
         {
@@ -734,10 +741,10 @@ namespace Qgfx
         if (!m_VkSwapchain)
             return;
 
-        auto& VkDevice = m_spRenderDevice->GetVkDevice();
-        auto& VkDispatch = m_spRenderDevice->GetVkDispatch();
+        auto& VkDevice = m_pRenderDevice->GetVkDevice();
+        auto& VkDispatch = m_pRenderDevice->GetVkDispatch();
 
-        m_spRenderDevice->WaitIdle();
+        m_pRenderDevice->WaitIdle();
 
         WaitForImageAcquiredFences();
 
@@ -775,20 +782,20 @@ namespace Qgfx
 
         // Check if the surface is lost
         {
-            auto& VkPhDeviceHandle = m_spRenderDevice->GetVkPhysicalDevice();
-            auto& VkDeviceHandle = m_spRenderDevice->GetVkDevice();
-            auto& VkDispatch = m_spRenderDevice->GetVkDispatch();
+            auto& VkPhDevice = m_pRenderDevice->GetVkPhysicalDevice();
+            auto& VkDevice = m_pRenderDevice->GetVkDevice();
+            auto& VkDispatch = m_pRenderDevice->GetVkDispatch();
 
             try
             {
-                vk::SurfaceCapabilitiesKHR SurfCapabilities = VkPhDeviceHandle.getSurfaceCapabilitiesKHR(m_VkSurface, VkDispatch);
+                vk::SurfaceCapabilitiesKHR SurfCapabilities = VkPhDevice.getSurfaceCapabilitiesKHR(m_VkSurface, VkDispatch);
                 (void)SurfCapabilities;
             }
             catch (const vk::SurfaceLostKHRError&)
             {
                 if (m_VkSwapchain)
                 {
-                    VkDeviceHandle.destroySwapchainKHR(m_VkSwapchain, nullptr, VkDispatch);
+                    VkDevice.destroySwapchainKHR(m_VkSwapchain, nullptr, VkDispatch);
                 }
 
                 // Recreate the surface

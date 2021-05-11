@@ -96,16 +96,21 @@ namespace Qgfx
 		m_SemaphorePool.push_back(SemaphoreVk);
 	}
 
-	CommandQueueVk::CommandQueueVk(IRefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, HardwareQueueVk* pHardwareQueue, bool bIsDefaultQueue)
-		: ICommandQueue(pRefCounter), m_pRenderDevice(pRenderDevice), m_pHardwareQueue(pHardwareQueue), m_FencePool(pRenderDevice), m_AcquiredSemaphorePool(pRenderDevice)
+	CommandQueueVk::CommandQueueVk(IEngineFactory* pEngineFactory, RenderDeviceVk* pRenderDevice, HardwareQueueVk* pHardwareQueue, bool bDefaultQueue)
+		: ICommandQueue(pEngineFactory, CommandQueueType::eGeneral), m_pRenderDevice(pRenderDevice), m_pHardwareQueue(pHardwareQueue), m_bDefaultQueue(bDefaultQueue),
+		m_FencePool(pRenderDevice), m_AcquiredSemaphorePool(pRenderDevice),
+		m_CommandBufferObjectAllocator(*nullptr, sizeof(CommandBufferVk), 128)
 	{
-		m_spRenderDevice = bIsDefaultQueue ? nullptr : pRenderDevice;
+		m_Type = pHardwareQueue->GetQueueType();
+
+		if (!m_bDefaultQueue)
+			m_pRenderDevice->AddRef();
 	}
 
 	CommandQueueVk::~CommandQueueVk()
 	{
-		vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
-		const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
+		vk::Device VkDevice = m_pRenderDevice->GetVkDevice();
+		const vk::DispatchLoaderDynamic& VkDispatch = m_pRenderDevice->GetVkDispatch();
 
 		m_pHardwareQueue->WaitIdle();
 
@@ -119,12 +124,15 @@ namespace Qgfx
 
 			m_AvailablePoolsAndBuffers.pop_back();
 		}
+
+		if (!m_bDefaultQueue)
+			m_pRenderDevice->Release();
 	}
 
 	void CommandQueueVk::SubmitCommandBuffers(uint32_t NumCommandBuffers, ICommandBuffer** ppCommandBuffers)
 	{
-		vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
-		const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
+		vk::Device VkDevice = m_pRenderDevice->GetVkDevice();
+		const vk::DispatchLoaderDynamic& VkDispatch = m_pRenderDevice->GetVkDispatch();
 
 		std::lock_guard Lock{ m_Mutex };
 
@@ -144,7 +152,7 @@ namespace Qgfx
 		for (uint32_t Index = 0; Index < NumCommandBuffers; Index++)
 		{
 			CommandBufferVk* pCommandBuffer = ValidatedCast<CommandBufferVk>(ppCommandBuffers[Index]);
-			pCommandBuffer->m_State = CommandBufferState::Executing;
+			pCommandBuffer->m_State = CommandBufferState::eExecuting;
 
 			CommandBufferToFree CmdBufferToFree{};
 			CmdBufferToFree.Index = m_NextSubmissionIndex;
@@ -240,8 +248,8 @@ namespace Qgfx
 
 	void CommandQueueVk::CheckPendingSubmissions(bool bForceWaitIdle)
 	{
-		vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
-		const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
+		vk::Device VkDevice = m_pRenderDevice->GetVkDevice();
+		const vk::DispatchLoaderDynamic& VkDispatch = m_pRenderDevice->GetVkDispatch();
 
 		while (!m_SubmissionFences.empty())
 		{
@@ -292,7 +300,7 @@ namespace Qgfx
 
 			if (SemToDelete.Index <= m_CompletedSubmissionIndex)
 			{
-				m_spRenderDevice->DestroyVkSemaphore(SemToDelete.Semaphore);
+				m_pRenderDevice->DestroyVkSemaphore(SemToDelete.Semaphore);
 				m_SemaphoresToDelete.pop_front();
 			}
 			else
@@ -307,7 +315,7 @@ namespace Qgfx
 
 			if (TexToDelete.Index <= m_CompletedSubmissionIndex)
 			{
-				m_spRenderDevice->DestroyVkTexture(TexToDelete.Image, TexToDelete.Allocation);
+				m_pRenderDevice->DestroyVkTexture(TexToDelete.Image, TexToDelete.Allocation);
 				m_TexturesToDelete.pop_front();
 			}
 			else
@@ -319,8 +327,8 @@ namespace Qgfx
 
 	void CommandQueueVk::CreateCommandBuffer(ICommandBuffer** ppCommandBuffer)
 	{
-		vk::Device VkDevice = m_spRenderDevice->GetVkDevice();
-		const vk::DispatchLoaderDynamic& VkDispatch = m_spRenderDevice->GetVkDispatch();
+		vk::Device VkDevice = m_pRenderDevice->GetVkDevice();
+		const vk::DispatchLoaderDynamic& VkDispatch = m_pRenderDevice->GetVkDispatch();
 
 		std::lock_guard Lock{ m_Mutex };
 
@@ -356,7 +364,19 @@ namespace Qgfx
 
 		PoolAndBuffer.Buffer.begin(BeginInfo, VkDispatch);
 
-		*ppCommandBuffer = MakeRefCountedObj<CommandBufferVk, PoolAllocator>(m_CommandBufferHandleAllocator, this)(m_spRenderDevice.Raw(), this, PoolAndBuffer.Pool, PoolAndBuffer.Buffer);
+		CommandBufferVk* pCommandBuffer = reinterpret_cast<CommandBufferVk*>(m_CommandBufferObjectAllocator.Allocate(sizeof(CommandBufferVk)));
+		new(pCommandBuffer) CommandBufferVk(this, m_pRenderDevice, PoolAndBuffer.Pool, PoolAndBuffer.Buffer);
+
+		*ppCommandBuffer = pCommandBuffer;
+	}
+
+	void CommandQueueVk::DeleteCommandBuffer(ICommandBuffer* pCommandBuffer)
+	{
+		ValidatedCast<CommandBufferVk>(pCommandBuffer)->~CommandBufferVk();
+
+		std::lock_guard Lock{ m_Mutex };
+
+		m_CommandBufferObjectAllocator.Free(pCommandBuffer);
 	}
 
 	void CommandQueueVk::WaitIdle()

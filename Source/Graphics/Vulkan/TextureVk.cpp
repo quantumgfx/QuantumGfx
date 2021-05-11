@@ -3,10 +3,11 @@
 
 namespace Qgfx
 {
-	TextureVk::TextureVk(IRefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, const TextureCreateInfo& CreateInfo)
-		: ITexture(pRefCounter, CreateInfo), m_bExternalImage(false)
+	TextureVk::TextureVk(IRenderDevice* pRenderDevice, const TextureCreateInfo& CreateInfo)
+		: ITexture(pRenderDevice, CreateInfo), m_bExternalImage(false)
 	{
-		m_spRenderDevice = pRenderDevice;
+		m_spRenderDevice = ValidatedCast<RenderDeviceVk>(pRenderDevice);
+		m_spCommandQueue = CreateInfo.pInitialQueue == nullptr ? m_spRenderDevice->GetDefaultQueue() : CreateInfo.pInitialQueue;
 
 		vk::ImageCreateInfo ImageCI{};
 
@@ -16,12 +17,10 @@ namespace Qgfx
 		auto Texture = m_spRenderDevice->CreateVkTexture(ImageCI, AllocCI);
 		m_VkImage = Texture.first;
 		m_VmaAllocation = Texture.second;
-
-		m_spCommandQueue = CreateInfo.pInitialQueue == nullptr ? pRenderDevice->GetDefaultQueue() : CreateInfo.pInitialQueue;
 	}
 
-	TextureVk::TextureVk(IRefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, const TextureCreateInfo& CreateInfo, vk::Image VkExternalImage)
-		: ITexture(pRefCounter, CreateInfo), m_VkImage(VkExternalImage), m_VmaAllocation(VMA_NULL), m_bExternalImage(true)
+	TextureVk::TextureVk(IRenderDevice* pRenderDevice, const TextureCreateInfo& CreateInfo, vk::Image VkExternalImage)
+		: ITexture(pRenderDevice, CreateInfo), m_VkImage(VkExternalImage), m_VmaAllocation(VMA_NULL), m_bExternalImage(true)
 	{
 	}
 

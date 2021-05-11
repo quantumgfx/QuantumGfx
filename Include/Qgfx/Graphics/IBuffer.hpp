@@ -2,9 +2,9 @@
 
 #include "Forward.hpp"
 #include "GraphicsTypes.hpp"
-#include "IObject.hpp"
 
 #include "../Common/FlagsEnum.hpp"
+#include "../Common/RefCountedObject.hpp"
 
 namespace Qgfx
 {
@@ -23,7 +23,8 @@ namespace Qgfx
 
     enum class BufferState
     {
-        eVertex = 0,
+        eUndefined = 0,
+        eVertex,
         eUniform,
         eIndex,
         eIndirect,
@@ -41,8 +42,6 @@ namespace Qgfx
         eIndex = 0x004,
         eIndirect = 0x008,
         eStorage = 0x010,
-        eFormattedUniform = 0x020,
-        eFormattedStorage = 0x040,
         eTransferSrc = 0x200,
         eTransferDst = 0x080,
         eMapRead = 0x100,
@@ -68,14 +67,9 @@ namespace Qgfx
 		ICommandQueue* pInitialQueue = nullptr;
 	};
 
-	class IBuffer : public IObject
+	class IBuffer : public IRefCountedObject<IBuffer>
 	{
 	public:
-
-		IBuffer(IRefCounter* pRefCounter)
-			: IObject(pRefCounter)
-		{
-		}
 
 		virtual uint32_t GetSize() const = 0;
 

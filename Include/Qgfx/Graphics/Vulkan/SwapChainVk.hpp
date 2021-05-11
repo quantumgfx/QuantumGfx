@@ -14,10 +14,6 @@ namespace Qgfx
 	{
 	public:
 
-		SwapChainVk(IRefCounter* pRefCounter, const SwapChainCreateInfo& CreateInfo, const NativeWindow& Window, RenderDeviceVk* pRenderDevice);
-
-		~SwapChainVk();
-
 		virtual void Resize(uint32_t NewWidth, uint32_t NewHeight, SurfaceTransform NewPreTransform) override;
 
 		virtual void AcquireNextTexture() override;
@@ -28,7 +24,11 @@ namespace Qgfx
 
 		virtual void Present() override;
 
+		virtual void Destroy() override;
+
 	private:
+
+		friend RenderDeviceVk;
 
 		void CreateSurface();
 		void CreateSwapChain();
@@ -39,15 +39,21 @@ namespace Qgfx
 
 		void WaitForImageAcquiredFences();
 
+		SwapChainVk(RenderDeviceVk* pRenderDevice, const SwapChainCreateInfo& CreateInfo);
+
+		~SwapChainVk();
+
 	private:
 
-		friend class CommandQueueVk;
+		friend EngineFactoryVk;
+		friend CommandQueueVk;
+		friend RenderDeviceVk;
 
 		////////////////////////////////
 		// Handles /////////////////////
 		////////////////////////////////
-		
-		RefPtr<RenderDeviceVk> m_spRenderDevice;
+
+		RenderDeviceVk* m_pRenderDevice;
 
 		RefPtr<CommandQueueVk> m_spCommandQueue;
 

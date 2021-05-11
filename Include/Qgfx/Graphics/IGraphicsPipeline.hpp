@@ -3,6 +3,7 @@
 #include "GraphicsTypes.hpp"
 #include "IPipeline.hpp"
 #include "ITexture.hpp"
+#include "IObject.hpp"
 
 namespace Qgfx
 {
@@ -41,6 +42,43 @@ namespace Qgfx
         eVertex,
         eInstance,
     };
+
+    enum class PrimitiveTopology
+    {
+        ePointList = 0,
+        eLineList,
+        eLineStrip,
+        eTriangleList,
+        eTriangleStrip,
+    };
+
+    enum class PolygonMode
+    {
+        eFill = 0,
+        eLine,
+        ePoint,
+    };
+
+    enum class FrontFace
+    {
+        eCounterClockwise,
+        eClockwise,
+    };
+
+    enum class CullModeFlagBits
+    {
+        eNone = 0x00,
+        eFront = 0x01,
+        eBack = 0x02
+    };
+
+    template<>
+    struct EnableEnumFlags<CullModeFlagBits>
+    {
+        static const bool bEnabled = true;
+    };
+
+    using CullModeFlags = Flags<CullModeFlagBits>;
 
     enum class StencilOperation
     {
@@ -101,7 +139,6 @@ namespace Qgfx
 
     using ColorWriteFlags = Flags<ColorWriteFlagBits>;
 
-
     struct VertexAttribute
     {
         uint32_t ShaderLocation;
@@ -125,7 +162,10 @@ namespace Qgfx
 
     struct PrimitiveState
     {
-
+        PrimitiveTopology Topology = PrimitiveTopology::eTriangleList;
+        PolygonMode PolyMode =       PolygonMode::eFill;
+        FrontFace Front =            FrontFace::eCounterClockwise;
+        CullModeFlags CullMode =     CullModeFlagBits::eNone;
     };
 
     struct MultisampleState
@@ -143,12 +183,13 @@ namespace Qgfx
         StencilOperation PassOp = StencilOperation::eKeep;
         uint32_t CompareMask = 0xffffffff;
         uint32_t WriteMask =   0xffffffff;
-        uint32_t Reference =   0xffffffff;
     };
 
     struct DepthStencilState
     {
-        bool bDepthTestEnable = true;
+        TextureFormat Format;
+
+        bool bDepthTestEnable = false;
         bool bDepthWriteEnabled = false;
         CompareFunc DepthCompare = CompareFunc::eAlways;
         
@@ -156,14 +197,18 @@ namespace Qgfx
         StencilFaceState StencilFront = {};
         StencilFaceState StencilBack = {};
 
-        float depthBias = 0;
-        float depthBiasSlopeScale = 0;
-        float depthBiasClamp = 0;
+        float DepthBias = 0;
+        float DepthBiasSlopeScale = 0;
+        float DepthBiasClamp = 0;
+
+        bool bDepthBoundsTestEnabled = false;
+        float MinDepthBounds;
+        float MaxDepthBounds;
     };
 
     struct BlendState
     {
-        bool bBlendEnable = true;
+        bool bBlendEnable = false;
         BlendFactor SrcColorFactor = BlendFactor::eOne;
         BlendFactor DstColorFactor = BlendFactor::eZero;
         BlendOperation ColorOp = BlendOperation::eAdd;
@@ -192,5 +237,17 @@ namespace Qgfx
         DepthStencilState DepthStencil = {};
         MultisampleState Multisample = {};
         FragmentState Fragment = {};
+    };
+
+    class IGraphicsPipeline : public IObject
+    {
+    protected:
+
+        IGraphicsPipeline(IRefCounter* pRefCounter)
+            : IObject(pRefCounter)
+        {
+        }
+
+        ~IGraphicsPipeline() = default;
     };
 }

@@ -2,34 +2,30 @@
 
 namespace Qgfx
 {
-	CommandBufferVk::CommandBufferVk(IRefCounter* pRefCounter, RenderDeviceVk* pRenderDevice, CommandQueueVk* pCommandQueue, vk::CommandPool VkCmdPool, vk::CommandBuffer VkCmdBuffer)
-		: ICommandBuffer(pRefCounter)
+	CommandBufferVk::CommandBufferVk(ICommandQueue* pCommandQueue, RenderDeviceVk* pRenderDevice, vk::CommandPool VkCmdPool, vk::CommandBuffer VkCmdBuffer)
+		: ICommandBuffer(pCommandQueue), m_pRenderDevice(pRenderDevice), m_VkCmdPool(VkCmdPool), m_VkCmdBuffer(VkCmdBuffer)
 	{
-		m_State = CommandBufferState::Recording;
-		m_spRenderDevice = pRenderDevice;
-		m_spCommandQueue = pCommandQueue;
-		m_VkCmdPool = VkCmdPool;
-		m_VkCmdBuffer = VkCmdBuffer;
+		m_State = CommandBufferState::eRecording;
 	}
 
 	CommandBufferVk::~CommandBufferVk()
 	{
-		if (m_State == CommandBufferState::Recording)
+		if (m_State == CommandBufferState::eRecording)
 		{
-			m_VkCmdBuffer.end(m_spRenderDevice->GetVkDispatch());
-			m_State = CommandBufferState::Ready;
+			m_VkCmdBuffer.end(m_pRenderDevice->GetVkDispatch());
+			m_State = CommandBufferState::eReady;
 		}
 		
-		if (m_State == CommandBufferState::Ready)
+		if (m_State == CommandBufferState::eReady)
 		{
-			m_spCommandQueue->ReleasePoolAndBuffer(m_VkCmdPool, m_VkCmdBuffer);
+			ValidatedCast<CommandQueueVk>(m_pCommandQueue)->ReleasePoolAndBuffer(m_VkCmdPool, m_VkCmdBuffer);
 		}
 	}
 
 	void CommandBufferVk::Finish()
 	{
-		QGFX_VERIFY(m_State == CommandBufferState::Recording, "Command Buffer must be in recording states to call ICommandBuffer::Finish()");
-		m_State = CommandBufferState::Ready;
-		m_VkCmdBuffer.end(m_spRenderDevice->GetVkDispatch());
+		QGFX_VERIFY(m_State == CommandBufferState::eRecording, "Command Buffer must be in recording states to call ICommandBuffer::Finish()");
+		m_State = CommandBufferState::eReady;
+		m_VkCmdBuffer.end(m_pRenderDevice->GetVkDispatch());
 	}
 }

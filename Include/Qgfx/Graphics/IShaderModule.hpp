@@ -2,8 +2,16 @@
 
 #include <cstdint>
 
+#include "Forward.hpp"
+
+#include "../Common/RefCountedObject.hpp"
+
 namespace Qgfx
 {
+	struct ShaderModuleDeleter
+	{
+		void operator()(IShaderModule* pShaderModule);
+	};
 
 	struct ShaderModuleCreateInfo
 	{
@@ -11,8 +19,20 @@ namespace Qgfx
 		const void* Code;
 	};
 
-	class IShaderModule
+	class IShaderModule : public IRefCountedObject<IShaderModule, ShaderModuleDeleter>
 	{
 	public:
+
+		virtual ~IShaderModule();
+
+	protected:
+
+		IShaderModule(IRenderDevice* pRenderDevice);
+
+	protected:
+
+		friend ShaderModuleDeleter;
+
+		IRenderDevice* m_pRenderDevice;
 	};
 }

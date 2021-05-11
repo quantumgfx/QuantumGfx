@@ -1,12 +1,12 @@
 #pragma once
 
 #include "GraphicsTypes.hpp"
-#include "IObject.hpp"
 #include "ICommandQueue.hpp"
 #include "ITexture.hpp"
 #include "ITextureView.hpp"
 
 #include "../Common/FlagsEnum.hpp"
+#include "../Common/RefCountedObject.hpp"
 
 namespace Qgfx
 {
@@ -60,6 +60,9 @@ namespace Qgfx
 
     struct SwapChainCreateInfo
     {
+
+        NativeWindow Window;
+
         /**
          * @brief Initial width of the swapchain
         */
@@ -89,16 +92,9 @@ namespace Qgfx
         ICommandQueue* pQueue = nullptr;
     };
 
-	class ISwapChain : public IObject
+	class ISwapChain
 	{
 	public:
-
-        ISwapChain(IRefCounter* pRefCounter)
-            : IObject(pRefCounter)
-        {
-        }
-
-        virtual ~ISwapChain() = default;
 
         /**
          * @brief Gets the Swap Chain's current width.
@@ -130,11 +126,18 @@ namespace Qgfx
 
         virtual void AcquireNextTexture() = 0;
 
+        /**
+         * @brief This function retrieve's the swapchain's current texture. It will be in state TextureState::ePresent after AcquireNextTexture
+         * And must be in TextureState::ePresent before Present is called.
+         * @return
+        */
         virtual ITexture* GetCurrentTexture() = 0;
 
         virtual ITextureView* GetCurrentTextureView() = 0;
 
         virtual void Present() = 0;
+
+        virtual void Destroy() = 0;
 
     protected:
 
