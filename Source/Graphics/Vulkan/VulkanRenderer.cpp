@@ -558,6 +558,7 @@ namespace Qgfx
 
 		m_DesiredTextureCount = Descriptor.TextureCount;
 		m_DesiredPreTransform = Descriptor.PreTransform;
+		m_DesiredUsage =        Descriptor.Usage;
 
 		m_GraphicsQueue = m_pVulkanQueue->GetVkQueue();
 
@@ -966,7 +967,7 @@ namespace Qgfx
 						m_Format = TextureFormat::eRGBA8Unorm;
 					}
 
-					m_VkClearColor = VulkanConversion::GetVkClearColorValue(m_ClearColor, m_Format);
+					m_VkClearValue = VulkanConversion::GetVkClearValue(m_ClearColor, m_Format);
 				}
 				else
 				{
@@ -1118,6 +1119,8 @@ namespace Qgfx
 			m_DesiredTextureCount = SurfCapabilities.maxImageCount;
 		}
 
+		m_Usage = m_DesiredUsage & VulkanConversion::GetResourceUsage(SurfCapabilities.supportedUsageFlags);
+
 		// We must use m_DesiredBufferCount instead of m_SwapChainDesc.BufferCount, because Vulkan on Android
 		// may decide to always add extra buffers, causing infinite growth of the swap chain when it is recreated:
 		//                          m_SwapChainDesc.BufferCount
@@ -1162,9 +1165,7 @@ namespace Qgfx
 		SwapChainCI.oldSwapchain = OldSwapchain;
 		SwapChainCI.clipped = true;
 		SwapChainCI.imageColorSpace = ColorSpace;
-		// vkCmdClearColorImage() command requires the image to use VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL layout
-		// that requires  VK_IMAGE_USAGE_TRANSFER_DST_BIT to be set
-		SwapChainCI.imageUsage = VulkanConversion::GetVkImageUsage(m_Usage) | vk::ImageUsageFlagBits::eTransferDst;
+		SwapChainCI.imageUsage = VulkanConversion::GetVkImageUsage(m_Usage);
 
 		std::set<uint32_t> QueueFamilyIndiciesSet;
 		QueueFamilyIndiciesSet.emplace(m_pVulkanQueue->GetVkQueueFamily());
@@ -1211,7 +1212,6 @@ namespace Qgfx
 		m_ImageAcquiredFences.resize(m_TextureCount);
 		m_ImageAcquiredSemaphores.resize(m_TextureCount);
 		m_SubmitCompleteSemaphores.resize(m_TextureCount);
-		m_ClearOnAcquireCommands.resize(m_TextureCount);
 
 		/*m_FrameTextures.resize(m_TextureCount);
 
@@ -1251,6 +1251,10 @@ namespace Qgfx
 		if (m_Flags & SwapChainCreationFlagBits::eClearOnAcquire)
 		{
 			AllocInfo.commandBufferCount = m_TextureCount;
+
+			m_ClearOnAcquireCommands.resize(m_TextureCount);
+			m_ClearOnAcquireFramebuffers.resize(m_TextureCount);
+			m_ClearOnAcquireRenderPasses.resize(m_TextureCount);
 
 			vk::throwResultException(VkDevice.allocateCommandBuffers(&AllocInfo, m_ClearOnAcquireCommands.data(), VkDispatch), "Failed to allocate clear on acquire command buffer for swapchain");
 		}
@@ -1303,25 +1307,99 @@ namespace Qgfx
 				ImageBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 				ImageBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 				
-				InitialClearCommandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer, {}, nullptr, nullptr, ImageBarrier, VkDispatch);
+				InitialClearCommandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eBottomOfPipe, {}, nullptr, nullptr, ImageBarrier, VkDispatch);
 
-				InitialClearCommandBuffer.clearColorImage(m_VkImages[i], vk::ImageLayout::eTransferDstOptimal, m_VkClearColor, AllSubresources, VkDispatch);
+				//InitialClearCommandBuffer.clearColorImage(m_VkImages[i], vk::ImageLayout::eTransferDstOptimal, m_VkClearColor, AllSubresources, VkDispatch);
 
-				ImageBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-				ImageBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
-				ImageBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-				ImageBarrier.dstAccessMask = {}; // Fences will ensure memory is available
+				//ImageBarrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+				//ImageBarrier.newLayout = vk::ImageLayout::ePresentSrcKHR;
+				//ImageBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+				//ImageBarrier.dstAccessMask = {}; // Fences will ensure memory is available
 
-				InitialClearCommandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eBottomOfPipe, {}, nullptr, nullptr, ImageBarrier, VkDispatch);
+				//InitialClearCommandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eBottomOfPipe, {}, nullptr, nullptr, ImageBarrier, VkDispatch);
 			}
 
 			if (m_Flags & SwapChainCreationFlagBits::eClearOnAcquire)
 			{
+				vk::FramebufferCreateInfo FramebufferCI{};
+				FramebufferCI.pNext = nullptr;
+				FramebufferCI.flags = {};
+				FramebufferCI.attachmentCount = 1;
+				FramebufferCI.layers = 1;
+				FramebufferCI.width = m_Width;
+				FramebufferCI.height = m_Height;
+				
+				m_ClearOnAcquireFramebuffers[i] = VkDevice.createFramebuffer(FramebufferCI, nullptr, VkDispatch);
+
+				vk::AttachmentDescription AttachmentDesc{};
+				AttachmentDesc.flags = {};
+				AttachmentDesc.format = m_VkColorFormat;
+				AttachmentDesc.initialLayout = vk::ImageLayout::eUndefined;
+				AttachmentDesc.finalLayout = vk::ImageLayout::ePresentSrcKHR;
+				AttachmentDesc.loadOp = vk::AttachmentLoadOp::eClear;
+				AttachmentDesc.storeOp = vk::AttachmentStoreOp::eStore;
+				AttachmentDesc.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+				AttachmentDesc.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+				AttachmentDesc.samples = vk::SampleCountFlagBits::e1;
+
+				vk::AttachmentReference AttachmentRef{};
+				AttachmentRef.attachment = 0;
+				AttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
+				vk::SubpassDescription SubpassDesc{};
+				SubpassDesc.flags = {};
+				SubpassDesc.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+				SubpassDesc.colorAttachmentCount = 1;
+				SubpassDesc.pColorAttachments = &AttachmentRef;
+				SubpassDesc.pResolveAttachments = nullptr;
+				SubpassDesc.inputAttachmentCount = 0;
+				SubpassDesc.pInputAttachments = nullptr;
+				SubpassDesc.preserveAttachmentCount = 0;
+				SubpassDesc.pPreserveAttachments = nullptr;
+				SubpassDesc.pDepthStencilAttachment = nullptr;
+
+				vk::SubpassDependency InitialDependency{};
+				InitialDependency.dependencyFlags = {};
+				InitialDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+				InitialDependency.srcAccessMask = {};
+				InitialDependency.srcStageMask = {};
+				InitialDependency.dstSubpass = 0;
+				InitialDependency.dstAccessMask = {};
+				InitialDependency.dstStageMask = {};
+
+				vk::RenderPassCreateInfo RenderPassCI{};
+				RenderPassCI.pNext = nullptr;
+				RenderPassCI.flags = {};
+				RenderPassCI.attachmentCount = 1;
+				RenderPassCI.pAttachments = &AttachmentDesc;
+				RenderPassCI.subpassCount = 1;
+				RenderPassCI.pSubpasses = &SubpassDesc;
+				RenderPassCI.dependencyCount = 0; // These will depend on how present barriers work
+				RenderPassCI.pDependencies = nullptr; // These will depend on how present barriers work
+
+				m_ClearOnAcquireRenderPasses[i] = VkDevice.createRenderPass(RenderPassCI, nullptr, VkDispatch);
+
 				vk::CommandBuffer ClearOnAcquireCommand = m_ClearOnAcquireCommands[i];
 
 				ClearOnAcquireCommand.begin(BeginInfo, VkDispatch);
 
-				vk::ImageMemoryBarrier ImageBarrier{};
+				vk::RenderPassBeginInfo BeginInfo{};
+				BeginInfo.pNext = nullptr;
+				BeginInfo.framebuffer = m_ClearOnAcquireFramebuffers[i];
+				BeginInfo.renderPass = m_ClearOnAcquireRenderPasses[i];
+				BeginInfo.renderArea.offset.x = 0;
+				BeginInfo.renderArea.offset.y = 0;
+				BeginInfo.renderArea.extent.width = m_Width;
+				BeginInfo.renderArea.extent.height = m_Height;
+				BeginInfo.clearValueCount = 1;
+				BeginInfo.pClearValues = &m_VkClearValue;
+
+				ClearOnAcquireCommand.beginRenderPass(BeginInfo, vk::SubpassContents::eInline, VkDispatch);
+
+				ClearOnAcquireCommand.endRenderPass();
+				
+
+				/*vk::ImageMemoryBarrier ImageBarrier{};
 				ImageBarrier.pNext = nullptr;
 				ImageBarrier.image = m_VkImages[i];
 				ImageBarrier.subresourceRange = AllSubresources;
@@ -1341,7 +1419,7 @@ namespace Qgfx
 				ImageBarrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
 				ImageBarrier.dstAccessMask = vk::AccessFlagBits::eMemoryRead;
 
-				ClearOnAcquireCommand.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eAllCommands, {}, nullptr, nullptr, ImageBarrier, VkDispatch);
+				ClearOnAcquireCommand.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eAllCommands, {}, nullptr, nullptr, ImageBarrier, VkDispatch);*/
 
 				ClearOnAcquireCommand.end(VkDispatch);
 			}
@@ -1410,10 +1488,27 @@ namespace Qgfx
 
 		if (m_Flags & SwapChainCreationFlagBits::eClearOnAcquire)
 		{
+
 			for (auto Cmd : m_ClearOnAcquireCommands)
 			{
 				VkDevice.freeCommandBuffers(m_CmdPool, 1, &Cmd, VkDispatch);
 			}
+
+			m_ClearOnAcquireCommands.clear();
+
+			for (auto Framebuffer : m_ClearOnAcquireFramebuffers)
+			{
+				VkDevice.destroyFramebuffer(Framebuffer, nullptr, VkDispatch);
+			}
+
+			m_ClearOnAcquireFramebuffers.clear();
+
+			for (auto Renderpass : m_ClearOnAcquireRenderPasses)
+			{
+				VkDevice.destroyRenderPass(Renderpass, nullptr, VkDispatch);
+			}
+
+			m_ClearOnAcquireRenderPasses.clear();
 
 		}
 

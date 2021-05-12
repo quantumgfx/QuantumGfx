@@ -118,11 +118,8 @@ if(${QGFX_PLATFORM_WIN32})
     set(QGFX_SOURCE_FILES ${QGFX_SOURCE_FILES} 
                         ${QGFX_SOURCE_DIR}/Platform/Win32/Win32Atomics.cpp)
 
-    target_compile_definitions(Qgfx PUBLIC QGFX_PLATFORM_WIN32=1)
+    target_compile_definitions(Qgfx PUBLIC QGFX_PLATFORM_WIN32=1 NOMINMAX)
 
-    if(${QGFX_VULKAN_SUPPORTED})
-        target_compile_definitions(Qgfx PUBLIC VK_USE_PLATFORM_WIN32_KHR NOMINMAX)
-    endif()
 endif()
 
 if(${QGFX_VULKAN_SUPPORTED})

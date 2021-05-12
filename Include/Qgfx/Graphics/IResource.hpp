@@ -168,6 +168,7 @@ namespace Qgfx
         eUint,
         eSint,
         eFloat,
+        ePlus,
     };
 
     struct TextureFormatParams

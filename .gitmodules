@@ -1,6 +1,3 @@
-[submodule "Extern/quantumvk"]
-	path = Extern/quantumvk
-	url = https://github.com/quantumgfx/quantumvk.git
 [submodule "ThirdParty/VulkanMemoryAllocator"]
 	path = ThirdParty/VulkanMemoryAllocator
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git

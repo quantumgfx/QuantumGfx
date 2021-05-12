@@ -78,33 +78,33 @@ namespace Qgfx
 
 		virtual void CreateCommandBuffer(ICommandBuffer** ppCommandBuffer) = 0;
 
-		/**
-		 * @brief This returns a uint64 value that represents all work done on the queue up until this point.
-		 * @return A value representing all work done on the queue up until this point.
-		*/
-		virtual uint64_t Signal() = 0;
+		///**
+		// * @brief This returns a uint64 value that represents all work done on the queue up until this point.
+		// * @return A value representing all work done on the queue up until this point.
+		//*/
+		//virtual uint64_t Signal() = 0;
 
-		/**
-		 * @brief This function blocks the CPU until the GPU finishes all work represented by the value. This value must have been retrieved by IQueue::Signal().
-		 * @param Value Represents all work up to a specified point.
-		*/
-		virtual void Wait(uint64_t Value) = 0;
+		///**
+		// * @brief This function blocks the CPU until the GPU finishes all work represented by the value. This value must have been retrieved by IQueue::Signal().
+		// * @param Value Represents all work up to a specified point.
+		//*/
+		//virtual void Wait(uint64_t Value) = 0;
 
-		/**
-		 * @brief This function blocks the CPU until all submitted work on the GPU is finished. It functions indentically to the following:
-		 * IQueue* pQueue;
-		 * pQueue->Wait(pQueue->Signal());
-		*/
-		virtual void WaitIdle() = 0;
+		///**
+		// * @brief This function blocks the CPU until all submitted work on the GPU is finished. It functions indentically to the following:
+		// * IQueue* pQueue;
+		// * pQueue->Wait(pQueue->Signal());
+		//*/
+		//virtual void WaitIdle() = 0;
 
-		/**
-		 * @brief This function inserts a "fence" or work dependency onto this queue. It requires that all work up to the specified point must be finished 
-		 * completing on the other queue before this queue can run any more commands. This function is non blocking, and inserts a wait on the GPU, rather
-		 * than the CPU (for the other way round, use IQueue::Wait()).
-		 * @param pQueue Queue to wait upon
-		 * @param Value Represents all work up to a specified point.
-		*/
-		virtual void Fence(IQueue* pQueue, uint64_t Value) = 0;
+		///**
+		// * @brief This function inserts a "fence" or work dependency onto this queue. It requires that all work up to the specified point must be finished 
+		// * completing on the other queue before this queue can run any more commands. This function is non blocking, and inserts a wait on the GPU, rather
+		// * than the CPU (for the other way round, use IQueue::Wait()).
+		// * @param pQueue Queue to wait upon
+		// * @param Value Represents all work up to a specified point.
+		//*/
+		//virtual void Fence(IQueue* pQueue, uint64_t Value) = 0;
 
 		inline QueueType GetType() { return m_Type; }
 
@@ -354,7 +354,7 @@ namespace Qgfx
 
 		virtual void WaitIdle() = 0;
 
-		virtual bool IsTextureFormatSupported(TextureFormat Fmt, ResourceUsageFlags Usage) = 0;
+		// virtual bool IsTextureFormatSupported(TextureFormat Fmt, ResourceUsageFlags Usage) = 0;
 
 		const DeviceFeatures& GetFeatures() const { return m_SupportedFeatures; }
 

@@ -4,6 +4,12 @@
 #error QGFX_VULKAN_SUPPORTED must be defined to include Vulkan related headers.
 #endif
 
+#ifdef QGFX_PLATFORM_WIN32
+#define VK_USE_PLATFORM_WIN32_KHR
+#else
+#error Unsupported platform for Vulkan
+#endif
+
 #define VK_NO_PROTOTYPES
 
 #include <vulkan/vulkan.hpp>
@@ -49,9 +55,11 @@ namespace Qgfx
 
 		static vk::ImageUsageFlags GetVkImageUsage(ResourceUsageFlags Usage);
 
-		static vk::ClearColorValue GetVkClearColorValue(ClearValue Clear, TextureFormat Fmt);
+		static ResourceUsageFlags GetResourceUsage(vk::BufferUsageFlags Usage);
 
-		static vk::ClearDepthStencilValue GetVkClearDepthStencilValue(ClearValue Clear);
+		static ResourceUsageFlags GetResourceUsage(vk::ImageUsageFlags Usage);
+
+		static vk::ClearValue GetVkClearValue(ClearValue Clear, TextureFormat Fmt);
 
 		static vk::Format GetColorVkFormat(TextureFormat ColorFmt);
 

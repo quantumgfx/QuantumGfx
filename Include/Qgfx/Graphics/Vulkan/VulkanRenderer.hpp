@@ -204,8 +204,6 @@ namespace Qgfx
 
 		void DestroyVulkanCommandBuffer(VulkanCommandBuffer* pCommandBuffer);
 
-		void GetVulkanDevice(VulkanDevice** ppDevice);
-
 	private:
 
 		friend VulkanDevice;
@@ -289,6 +287,7 @@ namespace Qgfx
 
 		SurfaceTransform    m_DesiredPreTransform;
 		uint32_t            m_DesiredTextureCount;
+		ResourceUsageFlags  m_DesiredUsage;
 
 		vk::SurfaceKHR m_VkSurface;
 		vk::SwapchainKHR m_VkSwapchain;
@@ -302,11 +301,13 @@ namespace Qgfx
 		std::vector<vk::Semaphore> m_ImageAcquiredSemaphores;
 		std::vector<vk::Semaphore> m_SubmitCompleteSemaphores;
 		std::vector<vk::CommandBuffer> m_ClearOnAcquireCommands;
+		std::vector<vk::Framebuffer> m_ClearOnAcquireFramebuffers;
+		std::vector<vk::RenderPass> m_ClearOnAcquireRenderPasses;
 
 		uint32_t m_TextureIndex;
 
 		vk::Format m_VkColorFormat;
-		vk::ClearColorValue m_VkClearColor;
+		vk::ClearValue m_VkClearValue;
 
 		// std::vector<ITexture*> m_FrameTextures;
 	};
