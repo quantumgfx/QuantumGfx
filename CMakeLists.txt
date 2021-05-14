@@ -80,16 +80,16 @@ set(QGFX_INCLUDE_FILES
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/MemoryAllocator.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/PoolAllocator.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/SpinLock.hpp
-        ${QGFX_INCLUDE_DIR}/Qgfx/Common/STDAllocator.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/TypeCompatibleBytes.hpp
-        ${QGFX_INCLUDE_DIR}/Qgfx/Common/RefPtr.hpp
-        ${QGFX_INCLUDE_DIR}/Qgfx/Common/RefCountedObject.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Common/IRefCountedObject.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Common/ValidatedCast.hpp
         # Platform Include Files
         ${QGFX_INCLUDE_DIR}/Qgfx/Platform/Atomics.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Platform/NativeWindow.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Platform/Numerics.hpp
         # Basic Platform Implementation
         ${QGFX_INCLUDE_DIR}/Qgfx/Platform/Basic/BasicAtomics.hpp
+        ${QGFX_INCLUDE_DIR}/Qgfx/Platform/Basic/BasicNumerics.hpp
         # Graphics Include Files
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IBase.hpp
         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/IRenderer.hpp
@@ -131,18 +131,12 @@ if(${QGFX_VULKAN_SUPPORTED})
     set(QGFX_INCLUDE_FILES ${QGFX_INCLUDE_FILES}
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/VulkanBase.hpp
                         ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/VulkanRenderer.hpp
-                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/VulkanResource.hpp
-
-                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/CommandBufferVk.hpp
-                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/CommandQueueVk.hpp)
+                        ${QGFX_INCLUDE_DIR}/Qgfx/Graphics/Vulkan/VulkanResource.hpp)
 
     set(QGFX_SOURCE_FILES ${QGFX_SOURCE_FILES}
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/VulkanBase.cpp
                         ${QGFX_SOURCE_DIR}/Graphics/Vulkan/VulkanRenderer.cpp
-                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/VulkanResource.cpp
-
-                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/CommandBufferVk.cpp
-                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/CommandQueueVk.cpp)
+                        ${QGFX_SOURCE_DIR}/Graphics/Vulkan/VulkanResource.cpp)
 
     target_compile_definitions(Qgfx PUBLIC QGFX_VULKAN_SUPPORTED=1)
 

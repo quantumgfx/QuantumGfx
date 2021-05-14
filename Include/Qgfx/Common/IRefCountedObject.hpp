@@ -13,42 +13,39 @@
 
 namespace Qgfx
 {
+    class IWeakRefCounter;
 
-	class IRefCountedObject
-	{
+    /**
+     * @brief Represents an intrusively refcounted object.
+    */
+    class IRefCountedObject
+    {
+    public:
 
-	public:
+        /**
+         * @brief This function increments the ref count of the object by one.
+        */
+        void AddRef();
 
-		inline void AddRef()
-		{
-			Atomics::AtomicIncrement(m_RefCount);
-		}
+        /**
+         * @brief This function decrements the ref count of the object by one. 
+         * And destroys it once the ref count equals zero.
+        */
+        void Release();
 
-		inline void Release()
-		{
-			auto RefCount = Atomics::AtomicDecrement(m_RefCount);
+        /**
+         * @brief This retrieves the current value of the ref counter.
+         * @return Current value of the ref counter.
+        */
+        Long GetRefCount();
 
-			if (RefCount == 0)
-			{
-                DeleteThis();
-			}
-		}
-
-        inline Atomics::AtomicLong GetRefCount()
-        {
-            return m_RefCount;
-        }
+        IWeakRefCounter* AddWeakRef();
 
     protected:
 
-        IRefCountedObject()
-            : m_RefCount(1)
-        {
-        }
+        IRefCountedObject();
 
-        virtual ~IRefCountedObject()
-        {
-        }
+        virtual ~IRefCountedObject() = default;
 
         // Override in extended class to provide custom deleter.
         virtual void DeleteThis()
@@ -56,17 +53,158 @@ namespace Qgfx
             delete this;
         }
 
+    private:
 
-	private:
+        AtomicLong m_RefCount;
 
-		Atomics::AtomicLong m_RefCount;
-	};
+        // Gates access to m_pWeakRefCounter
+        SpinLockFlag m_WeakRefCounterSpinFlag;
+        IWeakRefCounter* m_pWeakRefCounter; // nullptr if AddWeakRef() is never called
+    };
 
+    class IWeakRefCounter
+    {
+    public:
+
+        void AddWeakRef()
+        {
+            Atomics::Increment(m_WeakRefCount);
+        }
+
+        void ReleaseWeakRef()
+        {
+            SpinLock Lock{ m_RefCountedObjectSpinFlag };
+
+            auto WeakRefCount = Atomics::Decrement(m_WeakRefCount);
+            QGFX_VERIFY(WeakRefCount >= 0, "Inconsistent call to ReleaseWeakRef()");
+            // RefCountedObject holds a weak reference until destroyed, so checking this also checks whether or not the managed object is still alive.
+            if (WeakRefCount == 0 && m_pRefCountedObject == nullptr)
+            {
+                Lock.Unlock();
+
+                DeleteThis();
+            }
+        }
+
+        void Lock(IRefCountedObject** ppObject)
+        {
+            SpinLock Lock{ m_RefCountedObjectSpinFlag };
+
+            if (m_pRefCountedObject == nullptr)
+            {
+                *ppObject = nullptr;
+                return;
+            }
+
+            // Ensures that Lock is not called when ref count is zero
+
+            m_pRefCountedObject->AddRef();
+
+            if (m_pRefCountedObject->GetRefCount() > 1)
+            {
+                *ppObject = m_pRefCountedObject;
+                return;
+            }
+            
+            m_pRefCountedObject->Release();
+        }
+        
+
+    private:
+
+        friend IRefCountedObject;
+
+        IWeakRefCounter(IRefCountedObject* pRefCountedObject)
+            : m_pRefCountedObject(pRefCountedObject), m_WeakRefCount(1)
+        {
+        }
+
+        ~IWeakRefCounter()
+        {
+        }
+
+        void IndicateObjectDestroyed()
+        {
+            SpinLock Lock{ m_RefCountedObjectSpinFlag };
+
+            m_pRefCountedObject = nullptr;
+
+            if (Atomics::Load(m_WeakRefCount) == 0)
+            {
+                Lock.Unlock();
+
+                DeleteThis();
+            }
+        }
+
+        void DeleteThis()
+        {
+            delete this;
+        }
+
+        Atomics::AtomicLong m_WeakRefCount;
+
+        // Gates access to m_pRefCountedObject
+        SpinLockFlag m_RefCountedObjectSpinFlag;
+        IRefCountedObject* m_pRefCountedObject;
+
+    };
+
+    inline void IRefCountedObject::AddRef()
+    {
+        Atomics::Increment(m_RefCount);
+    }
+
+    inline void IRefCountedObject::Release()
+    {
+        auto RefCount = Atomics::Decrement(m_RefCount);
+        QGFX_VERIFY(RefCount >= 0, "Inconsistent call to Release()");
+        if (RefCount == 0)
+        {
+            // This block can only ever be called once, so no spin lock is necessary
+
+            if (m_pWeakRefCounter)
+            {
+                m_pWeakRefCounter->IndicateObjectDestroyed();
+            }
+
+            DeleteThis();
+        }
+    }
+
+    inline Long IRefCountedObject::GetRefCount()
+    {
+        return Atomics::Load(m_RefCount);
+    }
+
+    inline IWeakRefCounter* IRefCountedObject::AddWeakRef()
+    {
+        SpinLock Lock{ m_WeakRefCounterSpinFlag };
+
+        if (m_pWeakRefCounter == nullptr)
+        {
+            // m_pWeakRefCounter starts with one weak reference
+            m_pWeakRefCounter = new IWeakRefCounter(this);
+        }
+        else
+        {
+            m_pWeakRefCounter->AddWeakRef();
+        }
+
+        Lock.Unlock();
+
+        return m_pWeakRefCounter;
+    }
+
+    inline IRefCountedObject::IRefCountedObject()
+        : m_RefCount(1), m_pWeakRefCounter(nullptr)
+    {
+    }
 
 	template<typename T>
 	class RefPtr
 	{
-        //static_assert(std::is_base_of<IRefCountedObject<T>, T>::value, "T must extend Qgfx::IRefCountedObject to be used in Qgfx::RefPtr");
+        // static_assert(std::is_base_of<IRefCountedObject<T>, T>::value, "T must extend Qgfx::IRefCountedObject to be used in Qgfx::RefPtr");
 
 	public:
 
@@ -211,12 +349,6 @@ namespace Qgfx
         template<typename DstType>
         const DstType** RawDblPtr() const noexcept { return &ValidatedCast<DstType*>(m_pObject); }
 
-        template<typename DstType>
-        DstType* Raw() noexcept { return ValidatedCast<DstType*>(m_pObject); }
-
-        template<typename DstType>
-        const DstType* Raw() const noexcept { return ValidatedCast<DstType*>(m_pObject); }
-
 	private:
 
 		template <typename OtherType>
@@ -224,6 +356,110 @@ namespace Qgfx
 
 		T* m_pObject = nullptr;
 	};
+
+    template <typename T>
+       class WeakPtr
+       {
+
+           static_assert(std::is_base_of<IRefCountedObject, T>::value, "T must extend Qgfx::IRefCountedObject to be used in Qgfx::WeakPtr");
+
+       public:
+           explicit WeakPtr(T* pObj = nullptr) noexcept 
+               : m_pRefCounter{ nullptr }
+           {
+               if (pObj)
+               {
+                   m_pRefCounter = pObj->AddWeakRef();
+               }
+           }
+
+           WeakPtr(const WeakPtr& Other) noexcept
+               : m_pRefCounter{ Other.m_pRefCounter }
+           {
+               if (m_pRefCounter)
+                   m_pRefCounter->AddWeakRef();
+           }
+
+           WeakPtr(WeakPtr&& Other) noexcept
+               : m_pRefCounter{ std::move(Other.m_pRefCounter) }
+           {
+               Other.m_pRefCounter = nullptr;
+           }
+
+
+           ~WeakPtr()
+           {
+               Reset();
+           }
+
+           WeakPtr& operator=(T* pObj) noexcept
+           {
+               Reset();
+               if (pObj)
+               {
+                   m_pRefCounter = pObj->AddWeakRef();
+               }
+               return *this;
+           }
+
+           WeakPtr& operator=(const WeakPtr& Other) noexcept
+           {
+               if (*this == Other)
+                   return *this;
+
+               Reset();
+               m_pRefCounter = Other.m_pRefCounter;
+               if (m_pRefCounter)
+                   m_pRefCounter->AddWeakRef();
+               return *this;
+           }
+
+           WeakPtr& operator=(WeakPtr&& Other) noexcept
+           {
+               if (*this == Other)
+                   return *this;
+
+               Reset();
+               m_pRefCounter = std::move(Other.m_pRefCounter);
+               Other.m_pRefCounter = nullptr;
+               return *this;
+           }
+
+           void Reset() noexcept
+           {
+               if (m_pRefCounter)
+                   m_pRefCounter->ReleaseWeakRef();
+               m_pRefCounter = nullptr;
+           }
+
+           /// \note This method may not be reliable in a multithreaded environment.
+           ///       However, when false is returned, the strong pointer created from
+           ///       this weak pointer will reliably be empty.
+           bool IsValid() const noexcept
+           {
+               return m_pRefCounter != nullptr && m_pRefCounter->GetNumStrongRefs() > 0;
+           }
+
+           /// Obtains a strong reference to the object
+           void Lock(T** ppObject)
+           {
+               if (m_pRefCounter)
+               {
+                   m_pRefCounter->Lock(ppObject);
+               }
+               else
+               {
+                   *ppObject = nullptr;
+               }
+           }
+
+           bool operator==(const WeakPtr& Ptr) const noexcept { return m_pRefCounter == Ptr.m_pRefCounter; }
+           bool operator!=(const WeakPtr& Ptr) const noexcept { return m_pRefCounter != Ptr.m_pRefCounter; }
+
+       protected:
+
+           IWeakRefCounter* m_pRefCounter;
+       };
 
 //	/**
 //	 * @brief Forward declare RefCountedObject.
@@ -665,4 +901,270 @@ namespace Qgfx
 //
 //		AllocatorType* m_pAllocator;
 //	};
+
+//template<typename T>
+    //class RefPtr
+    //{
+ //       static_assert(std::is_base_of<IObject, T>::value, "T must extend Qgfx::IObject to be used in Qgfx::RefPtr");
+
+    //public:
+
+ //       RefPtr() noexcept {}
+
+ //       explicit RefPtr(T* pObj) noexcept 
+ //           : m_pObject{ pObj }
+ //       {
+ //           if (m_pObject)
+ //               m_pObject->AddRef();
+ //       }
+
+ //       RefPtr(const RefPtr& Other) noexcept 
+ //           : m_pObject{ Other.m_pObject }
+ //       {
+ //           if (m_pObject)
+ //               m_pObject->AddRef();
+ //       }
+
+ //       template <typename DerivedType, typename = typename std::enable_if<std::is_base_of<T, DerivedType>::value>::type>
+ //       RefPtr(const RefPtr<DerivedType>& Other) noexcept 
+ //           : RefPtr<T>{ Other.m_pObject }
+ //       {
+ //       }
+
+ //       RefPtr(RefPtr&& Other) noexcept :
+ //           m_pObject{ std::move(Other.m_pObject) }
+ //       {
+ //           //Make sure original pointer has no references to the object
+ //           Other.m_pObject = nullptr;
+ //       }
+
+ //       template <typename DerivedType, typename = typename std::enable_if<std::is_base_of<T, DerivedType>::value>::type>
+ //       RefPtr(RefPtr<DerivedType>&& Other) noexcept
+ //           : m_pObject{ std::move(Other.m_pObject) }
+ //       {
+ //           //Make sure original pointer has no references to the object
+ //           Other.m_pObject = nullptr;
+ //       }
+
+ //       ~RefPtr()
+ //       {
+ //           Reset();
+ //       }
+
+ //       void Attach(T* pObj) noexcept
+ //       {
+ //           Reset();
+ //           m_pObject = pObj;
+ //       }
+
+ //       T* Detach() noexcept
+ //       {
+ //           T* pObj = m_pObject;
+ //           m_pObject = nullptr;
+ //           return pObj;
+ //       }
+
+ //       void Reset() noexcept
+ //       {
+ //           if (m_pObject)
+ //           {
+ //               m_pObject->Release();
+ //               m_pObject = nullptr;
+ //           }
+ //       }
+
+ //       RefPtr& operator=(T* pObj) noexcept
+ //       {
+ //           if (m_pObject != pObj)
+ //           {
+ //               if (m_pObject)
+ //                   m_pObject->Release();
+ //               m_pObject = pObj;
+ //               if (m_pObject)
+ //                   m_pObject->AddRef();
+ //           }
+ //           return *this;
+ //       }
+
+ //       RefPtr& operator=(const RefPtr& Other) noexcept
+ //       {
+ //           return *this = Other.m_pObject;
+ //       }
+
+ //       template <typename DerivedType, typename = typename std::enable_if<std::is_base_of<T, DerivedType>::value>::type>
+ //       RefPtr& operator=(const RefPtr<DerivedType>& Other) noexcept
+ //       {
+ //           return *this = static_cast<T*>(Other.m_pObject);
+ //       }
+
+ //       RefPtr& operator=(RefPtr&& Other) noexcept
+ //       {
+ //           if (m_pObject != Other.m_pObject)
+ //               Attach(Other.Detach());
+
+ //           return *this;
+ //       }
+
+ //       template <typename DerivedType, typename = typename std::enable_if<std::is_base_of<T, DerivedType>::value>::type>
+ //       RefPtr& operator=(RefPtr<DerivedType>&& Other) noexcept
+ //       {
+ //           if (m_pObject != Other.m_pObject)
+ //               Attach(Other.Detach());
+
+ //           return *this;
+ //       }
+ //       
+ //       bool operator!() const noexcept { return m_pObject == nullptr; }
+ //       explicit operator bool() const noexcept { return m_pObject != nullptr; }
+ //       bool operator==(const RefPtr& Other) const noexcept { return m_pObject == Other.m_pObject; }
+ //       bool operator!=(const RefPtr& Other) const noexcept { return m_pObject != Other.m_pObject; }
+
+
+ //       T& operator*() noexcept { return *m_pObject; }
+ //       const T& operator*() const noexcept { return *m_pObject; }
+
+ //       operator T* () noexcept { return m_pObject; }
+ //       operator const T* () const noexcept { return m_pObject; }
+
+ //       T* operator->() noexcept { return m_pObject; }
+ //       const T* operator->() const noexcept { return m_pObject; }
+
+ //       T** operator&() { return &m_pObject; }
+ //       const T** operator&() const { return &m_pObject; }
+
+ //       T* Raw() noexcept { return m_pObject; }
+ //       const T* Raw() const noexcept { return m_pObject; }
+
+ //       T** RawDblPtr() noexcept { return &m_pObject; }
+ //       const T** RawDblPtr() const noexcept { return &m_pObject; }
+
+ //       template<typename DstType>
+ //       DstType* Raw() noexcept { return ValidatedCast<DstType*>(m_pObject); }
+
+ //       template<typename DstType>
+ //       const DstType* Raw() const noexcept { return ValidatedCast<DstType*>(m_pObject); }
+
+ //       template<typename DstType>
+ //       DstType** RawDblPtr() noexcept { return &ValidatedCast<DstType*>(m_pObject); }
+
+ //       template<typename DstType>
+ //       const DstType** RawDblPtr() const noexcept { return &ValidatedCast<DstType*>(m_pObject); }
+
+ //       template<typename DstType>
+ //       DstType* Raw() noexcept { return ValidatedCast<DstType*>(m_pObject); }
+
+ //       template<typename DstType>
+ //       const DstType* Raw() const noexcept { return ValidatedCast<DstType*>(m_pObject); }
+
+    //private:
+
+    //	template <typename OtherType>
+    //	friend class RefPtr;
+
+    //	T* m_pObject = nullptr;
+    //};
+
+ //   template <typename T>
+ //   class WeakPtr
+ //   {
+
+ //       static_assert(std::is_base_of<IObject, T>::value, "T must extend Qgfx::IObject to be used in Qgfx::WeakPtr");
+
+ //   public:
+ //       explicit WeakPtr(T* pObj = nullptr) noexcept 
+ //           : m_pRefCounter{ nullptr }
+ //       {
+ //           if (pObj)
+ //           {
+ //               m_pRefCounter = pObj->GetRefCounter();
+ //               m_pRefCounter->AddWeakRef();
+ //           }
+ //       }
+
+ //       WeakPtr(const WeakPtr& Other) noexcept
+ //           : m_pRefCounter{ Other.m_pRefCounter }
+ //       {
+ //           if (m_pRefCounter)
+ //               m_pRefCounter->AddWeakRef();
+ //       }
+
+ //       WeakPtr(WeakPtr&& Other) noexcept
+ //           : m_pRefCounter{ std::move(Other.m_pRefCounter) }
+ //       {
+ //           Other.m_pRefCounter = nullptr;
+ //       }
+
+
+ //       ~WeakPtr()
+ //       {
+ //           Reset();
+ //       }
+
+ //       WeakPtr& operator=(T* pObj) noexcept
+ //       {
+ //           Reset();
+ //           if (pObj)
+ //           {
+ //               m_pRefCounter = pObj->GetRefCounter();
+ //               m_pRefCounter->AddWeakRef();
+ //           }
+ //           return *this;
+ //       }
+
+ //       WeakPtr& operator=(const WeakPtr& Other) noexcept
+ //       {
+ //           if (*this == Other)
+ //               return *this;
+
+ //           Reset();
+ //           m_pRefCounter = Other.m_pRefCounter;
+ //           if (m_pRefCounter)
+ //               m_pRefCounter->AddWeakRef();
+ //           return *this;
+ //       }
+
+ //       WeakPtr& operator=(WeakPtr&& Other) noexcept
+ //       {
+ //           if (*this == Other)
+ //               return *this;
+
+ //           Reset();
+ //           m_pRefCounter = std::move(Other.m_pRefCounter);
+ //           Other.m_pRefCounter = nullptr;
+ //           return *this;
+ //       }
+
+ //       void Reset() noexcept
+ //       {
+ //           if (m_pRefCounter)
+ //               m_pRefCounter->ReleaseWeakRef();
+ //           m_pRefCounter = nullptr;
+ //       }
+
+ //       /// \note This method may not be reliable in a multithreaded environment.
+ //       ///       However, when false is returned, the strong pointer created from
+ //       ///       this weak pointer will reliably be empty.
+ //       bool IsValid() const noexcept
+ //       {
+ //           return m_pRefCounter != nullptr && m_pRefCounter->GetNumStrongRefs() > 0;
+ //       }
+
+ //       /// Obtains a strong reference to the object
+ //       RefPtr<T> Lock()
+ //       {
+ //           RefPtr<T> spObj;
+ //           if (m_pRefCounter)
+ //           {
+ //               m_pRefCounter->GetObject(&spObj);
+ //           }
+ //           return spObj;
+ //       }
+
+ //       bool operator==(const WeakPtr& Ptr) const noexcept { return m_pRefCounter == Ptr.m_pRefCounter; }
+ //       bool operator!=(const WeakPtr& Ptr) const noexcept { return m_pRefCounter != Ptr.m_pRefCounter; }
+
+ //   protected:
+
+ //       IRefCounter* m_pRefCounter;
+ //   };
 }

@@ -15,4 +15,7 @@ namespace Qgfx
 #else
 	using Atomics = BasicAtomics;
 #endif
+
+	using AtomicLong = Atomics::AtomicLong;
+	using AtomicInt64 = Atomics::AtomicInt64;
 }

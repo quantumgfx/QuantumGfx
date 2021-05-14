@@ -2,11 +2,11 @@
 
 #include "Forward.hpp"
 
-#include "../Common/RefCountedObject.hpp"
+#include "../Common/IRefCountedObject.hpp"
 
 namespace Qgfx
 {
-	enum class CommandBufferState
+	/*enum class CommandBufferState
 	{
 		eRecording = 0,
 		eReady,
@@ -39,5 +39,5 @@ namespace Qgfx
 		ICommandQueue* m_pCommandQueue;
 
 		CommandBufferState m_CurrentState = CommandBufferState::eRecording;
-	};
+	};*/
 }

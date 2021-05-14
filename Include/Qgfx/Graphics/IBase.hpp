@@ -7,7 +7,7 @@
 #include "../Common/ValidatedCast.hpp"
 #include "../Common/MemoryAllocator.hpp"
 #include "../Common/FixedBlockMemoryAllocator.hpp"
-#include "../Common/RefCountedObject.hpp"
+#include "../Common/IRefCountedObject.hpp"
 
 namespace Qgfx
 {

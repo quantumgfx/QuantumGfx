@@ -1362,10 +1362,21 @@ namespace Qgfx
 				InitialDependency.dependencyFlags = {};
 				InitialDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 				InitialDependency.srcAccessMask = {};
-				InitialDependency.srcStageMask = {};
+				InitialDependency.srcStageMask = vk::PipelineStageFlagBits::eTopOfPipe;
 				InitialDependency.dstSubpass = 0;
-				InitialDependency.dstAccessMask = {};
-				InitialDependency.dstStageMask = {};
+				InitialDependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+				InitialDependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;;
+
+				vk::SubpassDependency FinalDependency{};
+				InitialDependency.dependencyFlags = {};
+				InitialDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+				InitialDependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+				InitialDependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+				InitialDependency.dstSubpass = 0;
+				InitialDependency.dstAccessMask = {}; // This may change depending on how present barriers work
+				InitialDependency.dstStageMask = vk::PipelineStageFlagBits::eBottomOfPipe;  // This may change depending on how present barriers work
+
+				vk::SubpassDependency Dependencies[] = { InitialDependency, FinalDependency };
 
 				vk::RenderPassCreateInfo RenderPassCI{};
 				RenderPassCI.pNext = nullptr;
@@ -1374,8 +1385,8 @@ namespace Qgfx
 				RenderPassCI.pAttachments = &AttachmentDesc;
 				RenderPassCI.subpassCount = 1;
 				RenderPassCI.pSubpasses = &SubpassDesc;
-				RenderPassCI.dependencyCount = 0; // These will depend on how present barriers work
-				RenderPassCI.pDependencies = nullptr; // These will depend on how present barriers work
+				RenderPassCI.dependencyCount = 2;
+				RenderPassCI.pDependencies = Dependencies;
 
 				m_ClearOnAcquireRenderPasses[i] = VkDevice.createRenderPass(RenderPassCI, nullptr, VkDispatch);
 

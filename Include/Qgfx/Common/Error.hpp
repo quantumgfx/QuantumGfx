@@ -30,9 +30,9 @@ namespace Qgfx
         auto LastSlashPos = FileName.find_last_of("/\\");
         if (LastSlashPos != std::string::npos)
             FileName.erase(0, LastSlashPos + 1);
-        auto Msg = FormatString(Args...);
+        std::string Msg = FormatString(Args...);
 
-        WriteDebugMessage(IsFatal ? DebugMessageSeverity::FatalError : DebugMessageSeverity::Error, Msg.c_str(), Function, FullName.c_str(), Line);
+        WriteDebugMessage(IsFatal ? DebugMessageSeverity::FatalError : DebugMessageSeverity::Error, Msg.c_str(), Function, FullFilePath, Line);
 
         ThrowIf<bThrowException>(std::move(Msg));
     }

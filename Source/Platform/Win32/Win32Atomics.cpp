@@ -5,38 +5,48 @@
 namespace Qgfx
 {
     // The function returns the resulting INCREMENTED value.
-    WindowsAtomics::Long WindowsAtomics::AtomicIncrement(AtomicLong& Val)
+    Numerics::Long WindowsAtomics::Increment(AtomicLong& Val)
     {
         return InterlockedIncrement(&Val);
     }
 
-    WindowsAtomics::Int64 WindowsAtomics::AtomicIncrement(AtomicInt64& Val)
+    Numerics::Int64 WindowsAtomics::Increment(AtomicInt64& Val)
     {
         return InterlockedIncrement64(&Val);
     }
 
     // The function returns the resulting DECREMENTED value.
-    WindowsAtomics::Long WindowsAtomics::AtomicDecrement(AtomicLong& Val)
+    Numerics::Long WindowsAtomics::Decrement(AtomicLong& Val)
     {
         return InterlockedDecrement(&Val);
     }
 
-    WindowsAtomics::Int64 WindowsAtomics::AtomicDecrement(AtomicInt64& Val)
+    Numerics::Int64 WindowsAtomics::Decrement(AtomicInt64& Val)
     {
         return InterlockedDecrement64(&Val);
     }
 
-    WindowsAtomics::Long WindowsAtomics::AtomicCompareExchange(AtomicLong& Destination, Long Exchange, Long Comparand)
+    Numerics::Long WindowsAtomics::Load(WindowsAtomics::AtomicLong& Val)
+    {
+        return Val;
+    }
+
+    Numerics::Int64 WindowsAtomics::Load(WindowsAtomics::AtomicInt64& Val)
+    {
+        return Val;
+    }
+
+    Numerics::Long WindowsAtomics::CompareExchange(AtomicLong& Destination, Long Exchange, Long Comparand)
     {
         return InterlockedCompareExchange(&Destination, Exchange, Comparand);
     }
 
-    WindowsAtomics::Long WindowsAtomics::AtomicAdd(AtomicLong& Destination, Long Val)
+    Numerics::Long WindowsAtomics::Add(AtomicLong& Destination, Long Val)
     {
         return InterlockedAdd(&Destination, Val);
     }
 
-    WindowsAtomics::Int64 WindowsAtomics::AtomicAdd(AtomicInt64& Destination, Int64 Val)
+    Numerics::Int64 WindowsAtomics::Add(AtomicInt64& Destination, Int64 Val)
     {
         return InterlockedAdd64(&Destination, Val);
     }

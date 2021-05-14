@@ -15,13 +15,13 @@ namespace Qgfx
             Locked = 1
         };
 
-        SpinLockFlag(Atomics::Long InitFlag = static_cast<Atomics::Long>(SpinLockFlag::State::Unlocked)) noexcept
+        SpinLockFlag(Numerics::Long InitFlag = static_cast<Numerics::Long>(SpinLockFlag::State::Unlocked)) noexcept
         {
             //m_Flag.store(InitFlag);
             m_Flag = InitFlag;
         }
 
-        operator Atomics::Long() const { return m_Flag; }
+        operator Numerics::Long() { return Atomics::Load(m_Flag); }
 
     private:
         friend class SpinLock;
@@ -64,8 +64,8 @@ namespace Qgfx
 
         static bool UnsafeTryLock(SpinLockFlag& LockFlag) noexcept
         {
-            return Atomics::AtomicCompareExchange(LockFlag.m_Flag, static_cast<Atomics::Long>(SpinLockFlag::State::Locked), 
-                static_cast<Atomics::Long>(SpinLockFlag::State::Unlocked)) == SpinLockFlag::State::Unlocked;
+            return Atomics::CompareExchange(LockFlag.m_Flag, static_cast<Numerics::Long>(SpinLockFlag::State::Locked),
+                static_cast<Numerics::Long>(SpinLockFlag::State::Unlocked)) == SpinLockFlag::State::Unlocked;
         }
 
         bool TryLock(SpinLockFlag& LockFlag) noexcept
